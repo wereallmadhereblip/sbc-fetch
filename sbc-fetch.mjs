@@ -204,6 +204,15 @@ function updateApp() {
 
       console.log(`⬇️  Updating from ${currentShort} to ${remoteShort}...`);
       execSync('git pull origin main', { cwd: installDir, stdio: 'pipe' });
+      console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+      console.log('💡 Run "sbc-fetch" to see the latest features!');
+      return true;
+    }
+
+    // If no .git, reinstall from GitHub to get latest
+    console.log('📦 Fetching latest version...');
+    execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
+    console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
     console.log('💡 Run "sbc-fetch" to see the latest features!');
     return true;
   } catch (error) {
