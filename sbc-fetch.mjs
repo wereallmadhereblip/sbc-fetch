@@ -19,7 +19,10 @@ const DEFAULT_CONFIG = {
   trigger: 'every',     // every (new tab), daily (once a day), login (login shells only), manual
   duration: 0,          // 0 = run until keypress, or 1-60 seconds auto-exit
   greeting: 'Welcome back, $USER!',
-  showTip: true
+  showTip: true,
+  fps: 45,              // frames per second (30-120)
+  detail: 'high',       // low, medium, high
+  animSpeed: 1.0        // animation speed multiplier (0.5-2.0)
 };
 
 const OPTIONS = {
@@ -28,7 +31,8 @@ const OPTIONS = {
   anim: ['rotate', 'pendulum', 'bounce', 'pulse', 'tumble', 'wave', 'static'],
   look: ['blocks', 'ascii', 'binary', 'braille'],
   border: ['rounded', 'sharp', 'double', 'heavy', 'ascii', 'none'],
-  trigger: ['every', 'daily', 'login', 'manual']
+  trigger: ['every', 'daily', 'login', 'manual'],
+  detail: ['low', 'medium', 'high']
 };
 
 // xterm-256 Color Gradients (matching fetch-anim.mjs aesthetic)
@@ -466,14 +470,26 @@ async function runRenderer(cfg) {
   const voxels = buildVoxels(activeLogo);
   const sysLines = getSystemInfo();
 
-  const W = 34;
-  const H = 18;
+  // Detail level affects resolution and character set
+  const detailLevelMap = {
+    low: { resolution: 0.7, chars: '.,-~:;=!*#$@' },
+    medium: { resolution: 0.85, chars: '░▒▓█' },
+    high: { resolution: 1.0, chars: '░▒▓█▀▄' }
+  };
+  const detailLevel = detailLevelMap[cfg.detail] || detailLevelMap.high;
+
+  const W = Math.ceil(34 * detailLevel.resolution);
+  const H = Math.ceil(18 * detailLevel.resolution);
   const subH = cfg.look === 'blocks' ? H * 2 : H;
   const infoWidth = 48;
   const totalWidth = W + infoWidth + 5;
 
   const ASCII_RAMP = '.,-~:;=!*#$@';
+  const DETAIL_RAMP = detailLevel.chars;
   const BRAILLE_RAMP = ['⠂', '⠒', '⠖', '⠶', '⠷', '⠿', '⡿', '⣿'];
+  const BLOCK_CHARS_HIGH = ['░', '▒', '▓', '█'];
+  const BLOCK_CHARS_MED = ['░', '▓', '█'];
+  const BLOCK_CHARS_LOW = ['░', '█'];
 
   let prevFrame = [];
   let frameCount = 0;
@@ -525,23 +541,25 @@ async function runRenderer(cfg) {
     }
 
     let rotY = 0, rotX = 0.25, rotZ = 0, offsetY = 0, scale = 1.0;
+    const speedMult = cfg.animSpeed || 1.0;
+    
     if (cfg.anim === 'rotate') {
-      rotY = elapsed * 1.8;
+      rotY = elapsed * 1.8 * speedMult;
     } else if (cfg.anim === 'pendulum') {
-      rotY = Math.sin(elapsed * 2.2) * 0.68;
+      rotY = Math.sin(elapsed * 2.2 * speedMult) * 0.68;
     } else if (cfg.anim === 'bounce') {
-      rotY = elapsed * 1.1;
-      offsetY = Math.abs(Math.sin(elapsed * 4.0)) * -2.2 + 1.0;
+      rotY = elapsed * 1.1 * speedMult;
+      offsetY = Math.abs(Math.sin(elapsed * 4.0 * speedMult)) * -2.2 + 1.0;
     } else if (cfg.anim === 'pulse') {
-      rotY = elapsed * 1.0;
-      scale = 1.0 + Math.sin(elapsed * 3.5) * 0.16;
+      rotY = elapsed * 1.0 * speedMult;
+      scale = 1.0 + Math.sin(elapsed * 3.5 * speedMult) * 0.16;
     } else if (cfg.anim === 'tumble') {
-      rotY = elapsed * 1.5;
-      rotX = elapsed * 1.1;
-      rotZ = elapsed * 0.7;
+      rotY = elapsed * 1.5 * speedMult;
+      rotX = elapsed * 1.1 * speedMult;
+      rotZ = elapsed * 0.7 * speedMult;
     } else if (cfg.anim === 'wave') {
-      rotY = Math.sin(elapsed * 1.8) * 0.45;
-      rotX = Math.cos(elapsed * 2.4) * 0.35;
+      rotY = Math.sin(elapsed * 1.8 * speedMult) * 0.45;
+      rotX = Math.cos(elapsed * 2.4 * speedMult) * 0.35;
     }
 
     const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
@@ -678,7 +696,8 @@ async function runRenderer(cfg) {
     frameCount++;
   };
 
-  setInterval(renderFrame, 1000 / 60);
+  const frameDuration = 1000 / (cfg.fps || 45);
+  setInterval(renderFrame, frameDuration);
   renderFrame();
 }
 
@@ -722,6 +741,9 @@ async function main() {
     else if (a === '--look' && next) { previewCfg.look = next; i++; }
     else if (a === '--border' && next) { previewCfg.border = next; i++; }
     else if (a === '--duration' && next) { previewCfg.duration = parseInt(next, 10) || 0; i++; }
+    else if (a === '--fps' && next) { previewCfg.fps = Math.max(30, Math.min(120, parseInt(next, 10) || 45)); i++; }
+    else if (a === '--detail' && next) { previewCfg.detail = next; i++; }
+    else if (a === '--speed' && next) { previewCfg.animSpeed = Math.max(0.5, Math.min(2.0, parseFloat(next) || 1.0)); i++; }
     else if (a === '--set-logo' && next) { cfg.logo = next; previewCfg.logo = next; shouldSave = true; i++; }
     else if (a === '--set-theme' && next) { cfg.theme = next; previewCfg.theme = next; shouldSave = true; i++; }
     else if (a === '--set-anim' && next) { cfg.anim = next; previewCfg.anim = next; shouldSave = true; i++; }
@@ -730,6 +752,9 @@ async function main() {
     else if (a === '--set-trigger' && next) { cfg.trigger = next; previewCfg.trigger = next; shouldSave = true; i++; }
     else if (a === '--set-greeting' && next) { cfg.greeting = next; previewCfg.greeting = next; shouldSave = true; i++; }
     else if (a === '--set-duration' && next) { cfg.duration = parseInt(next, 10) || 0; previewCfg.duration = cfg.duration; shouldSave = true; i++; }
+    else if (a === '--set-fps' && next) { cfg.fps = Math.max(30, Math.min(120, parseInt(next, 10) || 45)); previewCfg.fps = cfg.fps; shouldSave = true; i++; }
+    else if (a === '--set-detail' && next) { cfg.detail = next; previewCfg.detail = next; shouldSave = true; i++; }
+    else if (a === '--set-speed' && next) { cfg.animSpeed = Math.max(0.5, Math.min(2.0, parseFloat(next) || 1.0)); previewCfg.animSpeed = cfg.animSpeed; shouldSave = true; i++; }
     else if (a === '--set-showTip') { cfg.showTip = true; previewCfg.showTip = true; shouldSave = true; }
     else if (a === '--no-tip') { cfg.showTip = false; previewCfg.showTip = false; shouldSave = true; }
     else if (a === '--motd-info') {

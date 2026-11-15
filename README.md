@@ -83,6 +83,35 @@ sbc-fetch --set-trigger daily --set-greeting "Welcome back, \$USER!"
 | **Borders** | `rounded`, `sharp`, `double`, `heavy`, `ascii`, `none` |
 | **Triggers** | `every` (new tab), `daily` (once a day), `login` (login shells only), `manual` |
 | **Duration** | `0` (continuous until keypress), or `1`–`60` seconds auto-exit |
+| **FPS** | `30`–`120` (default: `45`) |
+| **Detail** | `low`, `medium`, `high` (default: `high`) |
+| **Animation Speed** | `0.5`–`2.0` multiplier (default: `1.0`) |
+
+### Performance & Visual Quality Flags
+
+Fine-tune the animation's performance and visual quality:
+
+```bash
+# Increase FPS for smoother animation (uses more CPU)
+sbc-fetch --fps 60
+
+# Reduce detail for lower CPU usage on older hardware
+sbc-fetch --detail low
+
+# Speed up animation (0.5 = half speed, 2.0 = double speed)
+sbc-fetch --speed 1.5
+
+# Combine options
+sbc-fetch --fps 60 --detail high --speed 1.2
+
+# Save as permanent defaults
+sbc-fetch --set-fps 60 --set-detail high --set-speed 1.2
+```
+
+**Detail Level Breakdown:**
+- **`low`** — Renders at 70% resolution with basic ASCII characters, best for very old devices
+- **`medium`** — Renders at 85% resolution with shade block characters (░▒▓█)
+- **`high`** — Full resolution with extended shade blocks and depth shading (░▒▓█▀▄), maximum visual quality
 
 ---
 
