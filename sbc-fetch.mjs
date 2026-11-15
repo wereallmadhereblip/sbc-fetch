@@ -173,7 +173,17 @@ function updateApp() {
   }
 
   try {
-    // If .git exists, use git pull
+    // Read current version
+    const packagePath = join(installDir, 'package.json');
+    if (!existsSync(packagePath)) {
+      console.log('❌ package.json not found at installation directory.');
+      return false;
+    }
+
+    const currentPkg = JSON.parse(readFileSync(packagePath, 'utf8'));
+    const currentVersion = currentPkg.version;
+
+    // If .git exists, use git pull for efficiency
     if (existsSync(join(installDir, '.git'))) {
       console.log('📦 Checking for updates...');
       const currentCommit = execSync('git rev-parse HEAD', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
@@ -182,7 +192,7 @@ function updateApp() {
       const remoteCommit = execSync('git rev-parse origin/main', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
 
       if (currentCommit === remoteCommit) {
-        console.log('✅ sbc-fetch is already up to date! (commit: ' + currentCommit + ')');
+        console.log('✅ sbc-fetch is already up to date! (version: ' + currentVersion + ')');
         return true;
       }
 
@@ -194,9 +204,28 @@ function updateApp() {
       return true;
     }
 
-    // If no .git (npm install from git URL), reinstall to get latest version
-    console.log('📦 Reinstalling latest version...');
+    // If no .git, check remote version first
+    console.log('📦 Checking for updates...');
+    let remoteVersion;
+    try {
+      const remotePkg = execSync('curl -s https://raw.githubusercontent.com/wereallmadhereblip/sbc-fetch/main/package.json', { encoding: 'utf8' });
+      remoteVersion = JSON.parse(remotePkg).version;
+    } catch {
+      console.log('⚠️  Could not check remote version. Attempting update...');
+      execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
+      console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+      console.log('💡 Run "sbc-fetch" to see the latest features!');
+      return true;
+    }
+
+    if (currentVersion === remoteVersion) {
+      console.log('✅ sbc-fetch is already up to date! (version: ' + currentVersion + ')');
+      return true;
+    }
+
+    console.log(`⬇️  Updating from v${currentVersion} to v${remoteVersion}...`);
     execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
+    
     console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
     console.log('💡 Run "sbc-fetch" to see the latest features!');
     return true;
