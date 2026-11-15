@@ -151,11 +151,13 @@ function restoreMotd() {
 // App Update Trigger
 function getInstallDir() {
   try {
-    const result = execSync('npm list -g sbc-fetch --depth=0', { stdio: 'pipe', encoding: 'utf8' });
-    const match = result.match(/(?:^|\n).*sbc-fetch@.*\s+(.+)$/m);
-    if (match?.[1]) {
-      const path = match[1].trim();
-      return path.endsWith('/lib/node_modules/sbc-fetch') ? path : null;
+    // Get the global npm prefix (usually /usr/local or ~/.nvm/versions/node/vX.X.X)
+    const npmPrefix = execSync('npm config get prefix', { stdio: 'pipe', encoding: 'utf8' }).trim();
+    const globalPath = join(npmPrefix, 'lib', 'node_modules', 'sbc-fetch');
+    
+    // Check if sbc-fetch is actually installed there
+    if (existsSync(globalPath) && existsSync(join(globalPath, 'package.json'))) {
+      return globalPath;
     }
   } catch {}
   return null;
