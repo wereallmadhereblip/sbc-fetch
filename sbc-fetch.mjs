@@ -20,8 +20,8 @@ const DEFAULT_CONFIG = {
   duration: 0,          // 0 = run until keypress, or 1-60 seconds auto-exit
   greeting: 'Welcome back, $USER!',
   showTip: true,
-  fps: 45,              // frames per second (30-120)
-  detail: 'high',       // low, medium, high
+  fps: 30,              // frames per second (30-120) - Zero 4 default is 30
+  detail: 'medium',     // low, medium, high - Zero 4 default is medium
   animSpeed: 1.0        // animation speed multiplier (0.5-2.0)
 };
 
@@ -253,8 +253,31 @@ function detectPlatform() {
   return 'tux';
 }
 
-// Build detailed 3D citrus geometry with proper lighting
-function buildCitrusGeometry() {
+// Detect if running on low-power device (Zero 4, Pi Zero, etc)
+function isLowPowerDevice() {
+  try {
+    const cpuinfo = readFileSync('/proc/cpuinfo', 'utf8');
+    // Count CPU cores and check model
+    const coreCount = (cpuinfo.match(/processor\s*:/g) || []).length;
+    const isZero = cpuinfo.includes('BCM2835') || cpuinfo.includes('H616') || cpuinfo.includes('H313');
+    return coreCount <= 2 || isZero;
+  } catch {
+    return false;
+  }
+}
+
+// Optimize config for low-power devices
+function optimizeForHardware(cfg) {
+  if (isLowPowerDevice()) {
+    cfg.fps = Math.min(cfg.fps, 30);           // Cap at 30 FPS
+    cfg.detail = cfg.detail === 'high' ? 'medium' : cfg.detail;  // No high detail
+    cfg.animSpeed = Math.min(cfg.animSpeed, 1.0);  // No fast animation
+  }
+  return cfg;
+}
+
+// Build detailed 3D citrus geometry with proper lighting (optimized for low-power)
+function buildCitrusGeometry(lowPower = false) {
   const rawPts = [];
 
   const yOffset = -0.22;
@@ -272,19 +295,22 @@ function buildCitrusGeometry() {
     }
   }
 
-  // Scalloped Outer Rind
-  for (let i = 0; i < 260; i++) {
+  // Scalloped Outer Rind - reduce detail on low-power
+  const rinStep = lowPower ? 0.075 : 0.038;
+  const angleStep = lowPower ? 18 : 1;
+  for (let i = 0; i < 260; i += angleStep) {
     const theta = (i / 260) * Math.PI * 2;
     const cosT = Math.cos(theta);
     const sinT = Math.sin(theta);
     const rOuter = 1.44 + 0.065 * Math.cos(12 * theta);
-    for (let r = 1.15; r <= rOuter; r += 0.038) {
+    for (let r = 1.15; r <= rOuter; r += rinStep) {
       addExtrudedPoint(r * cosT, r * sinT, cosT, sinT, 0);
     }
   }
 
   // Center Hub
-  for (let i = 0; i < 72; i++) {
+  const hubStep = lowPower ? 12 : 1;
+  for (let i = 0; i < 72; i += hubStep) {
     const theta = (i / 72) * Math.PI * 2;
     const cosT = Math.cos(theta);
     const sinT = Math.sin(theta);
@@ -300,8 +326,9 @@ function buildCitrusGeometry() {
     const sinA = Math.sin(spokeAngle);
     const px = -sinA;
     const py = cosA;
-    for (let r = 0.12; r <= 1.16; r += 0.034) {
-      for (let w = -0.034; w <= 0.034; w += 0.017) {
+    const spokestep = lowPower ? 0.068 : 0.034;
+    for (let r = 0.12; r <= 1.16; r += spokestep) {
+      for (let w = -spokestep; w <= spokestep; w += spokestep) {
         addExtrudedPoint(r * cosA + w * px, r * sinA + w * py, px, py, 0);
       }
     }
@@ -314,29 +341,31 @@ function buildCitrusGeometry() {
     const sinA = Math.sin(seedAngle);
     const px = -sinA;
     const py = cosA;
-    for (let u = 0; u <= 1; u += 0.065) {
+    const seedStep = lowPower ? 0.13 : 0.065;
+    for (let u = 0; u <= 1; u += seedStep) {
       const r = 0.22 + u * 0.32;
       const halfWidth = Math.sin(Math.pow(u, 0.65) * Math.PI) * 0.088;
-      for (let w = -halfWidth; w <= halfWidth; w += 0.022) {
+      for (let w = -halfWidth; w <= halfWidth; w += 0.044) {
         addExtrudedPoint(r * cosA + w * px, r * sinA + w * py, cosA, sinA, 0);
       }
     }
   }
 
   // Two Green Leaves on Top
-  for (let u = 0; u <= 1; u += 0.03) {
+  const leafStep = lowPower ? 0.06 : 0.03;
+  for (let u = 0; u <= 1; u += leafStep) {
     const sx = -0.05 - u * 0.42;
     const sy = 1.54 + u * 0.46 + Math.sin(u * Math.PI) * 0.06;
     const halfW = Math.sin(Math.pow(u, 0.7) * Math.PI) * 0.14;
-    for (let w = -halfW; w <= halfW; w += 0.024) {
+    for (let w = -halfW; w <= halfW; w += 0.048) {
       addExtrudedPoint(sx + w * 0.7, sy - w * 0.7, -0.5, 0.85, 1);
     }
   }
-  for (let u = 0; u <= 1; u += 0.025) {
+  for (let u = 0; u <= 1; u += leafStep * 0.85) {
     const sx = 0.04 + u * 0.96;
     const sy = 1.54 + Math.sin(u * Math.PI * 0.75) * 0.44 + u * 0.12;
     const halfW = Math.sin(Math.pow(u, 0.68) * Math.PI) * 0.24;
-    for (let w = -halfW; w <= halfW; w += 0.024) {
+    for (let w = -halfW; w <= halfW; w += 0.048) {
       addExtrudedPoint(sx - w * 0.35, sy + w * 0.92, 0.3, 0.92, 1);
     }
   }
@@ -344,10 +373,14 @@ function buildCitrusGeometry() {
   return new Float32Array(rawPts);
 }
 
-// Generate High-Detail 3D Geometries for Each Logo
-function buildVoxels(type) {
+// Generate High-Detail 3D Geometries for Each Logo (with low-power fallback)
+function buildVoxels(type, lowPower = false) {
   const pts = [];
   const add = (x, y, z, c = 1) => pts.push([x, y, z, c]);
+  
+  // Reduce detail for low-power devices
+  const step = lowPower ? 1.5 : 1.0;
+  const skipEvery = lowPower ? 2 : 1;
 
   if (type === 'raspberrypi') {
     // Raspberry Pi: detailed body with GPIO header, cooling features
@@ -586,6 +619,10 @@ const LEAF_GRADIENT = [155, 119, 83, 77, 41, 34];
 
 // 60 FPS Synchronized 3D Renderer with Proper Lighting
 async function runRenderer(cfg) {
+  // Optimize for hardware automatically
+  const lowPower = isLowPowerDevice();
+  cfg = optimizeForHardware(cfg);
+  
   const detected = detectPlatform();
   const activeLogo = cfg.logo === 'auto' ? detected : cfg.logo;
   const activeThemeName = cfg.theme === 'auto' ? detected : cfg.theme;
@@ -596,11 +633,11 @@ async function runRenderer(cfg) {
   let renderGeometry = null;
   let isCitrus = false;
   if (activeLogo === 'orangepi' || activeThemeName === 'orangepi') {
-    renderGeometry = buildCitrusGeometry();
+    renderGeometry = buildCitrusGeometry(lowPower);
     isCitrus = true;
   }
 
-  const voxels = isCitrus ? null : buildVoxels(activeLogo);
+  const voxels = isCitrus ? null : buildVoxels(activeLogo, lowPower);
   const sysLines = getSystemInfo();
 
   // Detail level affects resolution and character set
