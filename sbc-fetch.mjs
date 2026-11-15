@@ -26,7 +26,7 @@ const DEFAULT_CONFIG = {
 };
 
 const OPTIONS = {
-  logo: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'tux'],
+  logo: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'tux', 'torus'],
   theme: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'red', 'matrix', 'cyberpunk', 'nord', 'dracula'],
   anim: ['rotate', 'pendulum', 'bounce', 'bounce+rotate', 'pulse', 'tumble', 'wave', 'static'],
   look: ['blocks', 'ascii', 'binary', 'braille'],
@@ -401,7 +401,24 @@ function buildVoxels(type, lowPower = false) {
   const step = lowPower ? 1.5 : 1.0;
   const skipEvery = lowPower ? 2 : 1;
 
-  if (type === 'raspberrypi') {
+  if (type === 'torus') {
+    // 3D Parametric Spinning Torus (Donut)
+    const R = 4.5; // Major ring radius
+    const r = 2.1; // Minor tube radius
+    const thetaStep = lowPower ? 0.14 : 0.08;
+    const phiStep = lowPower ? 0.22 : 0.13;
+    for (let theta = 0; theta < Math.PI * 2; theta += thetaStep) {
+      const cosT = Math.cos(theta), sinT = Math.sin(theta);
+      for (let phi = 0; phi < Math.PI * 2; phi += phiStep) {
+        const cosP = Math.cos(phi), sinP = Math.sin(phi);
+        const ringDist = R + r * cosP;
+        const x = ringDist * cosT;
+        const y = r * sinP;
+        const z = ringDist * sinT;
+        add(x, y, z, Math.sin(phi) > 0.5 ? 2 : 1);
+      }
+    }
+  } else if (type === 'raspberrypi') {
     // Raspberry Pi: detailed body with GPIO header, cooling features
     for (let y = -6.5; y <= 5.5; y += 0.45) {
       const rad = 5.8 * Math.max(0, 1 - Math.abs(y + 0.8) / 8.5);
