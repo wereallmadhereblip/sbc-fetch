@@ -186,6 +186,7 @@ function updateApp() {
 
     const currentPkg = JSON.parse(readFileSync(packagePath, 'utf8'));
     const currentVersion = currentPkg.version;
+    const checkCachePath = join(CONFIG_DIR, '.last-update-check');
 
     // If .git exists, use git commit hashes for accurate version detection
     if (existsSync(join(installDir, '.git'))) {
@@ -199,6 +200,8 @@ function updateApp() {
 
       if (currentCommit === remoteCommit) {
         console.log('✅ sbc-fetch is already up to date! (commit: ' + currentShort + ')');
+        mkdirSync(CONFIG_DIR, { recursive: true });
+        writeFileSync(checkCachePath, remoteCommit);
         return true;
       }
 
@@ -206,15 +209,45 @@ function updateApp() {
       execSync('git pull origin main', { cwd: installDir, stdio: 'pipe' });
       console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
       console.log('💡 Run "sbc-fetch" to see the latest features!');
+      mkdirSync(CONFIG_DIR, { recursive: true });
+      writeFileSync(checkCachePath, remoteCommit);
       return true;
     }
 
-    // If no .git, reinstall from GitHub to get latest
-    console.log('📦 Fetching latest version...');
-    execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
-    console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
-    console.log('💡 Run "sbc-fetch" to see the latest features!');
-    return true;
+    // For npm-installed versions, check against remote
+    console.log('📦 Checking for updates...');
+    try {
+      const remoteInfo = execSync('npm view sbc-fetch@latest version --json', { encoding: 'utf8' }).trim();
+      const remoteVersion = JSON.parse(remoteInfo);
+      
+      if (currentVersion === remoteVersion) {
+        // Check if we've recently verified this version
+        if (existsSync(checkCachePath)) {
+          const lastCheck = readFileSync(checkCachePath, 'utf8').trim();
+          if (lastCheck === currentVersion) {
+            console.log(`✅ sbc-fetch is already up to date! (v${currentVersion})`);
+            return true;
+          }
+        }
+        
+        console.log(`✅ sbc-fetch is already up to date! (v${currentVersion})`);
+        mkdirSync(CONFIG_DIR, { recursive: true });
+        writeFileSync(checkCachePath, currentVersion);
+        return true;
+      }
+      
+      console.log(`⬇️  Updating from v${currentVersion} to v${remoteVersion}...`);
+      execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
+      mkdirSync(CONFIG_DIR, { recursive: true });
+      writeFileSync(checkCachePath, remoteVersion);
+      console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+      console.log('💡 Run "sbc-fetch" to see the latest features!');
+      return true;
+    } catch (err) {
+      console.log('❌ Update check failed: ' + err.message);
+      console.log('💡 Try manual reinstall: npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git');
+      return false;
+    }
   } catch (error) {
     console.log('❌ Update failed: ' + error.message);
     console.log('💡 Try manual reinstall: npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git');
