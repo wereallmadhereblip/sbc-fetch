@@ -28,7 +28,7 @@ const DEFAULT_CONFIG = {
 const OPTIONS = {
   logo: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'tux'],
   theme: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'red', 'matrix', 'cyberpunk', 'nord', 'dracula'],
-  anim: ['rotate', 'pendulum', 'bounce', 'pulse', 'tumble', 'wave', 'static'],
+  anim: ['rotate', 'pendulum', 'bounce', 'bounce+rotate', 'pulse', 'tumble', 'wave', 'static'],
   look: ['blocks', 'ascii', 'binary', 'braille'],
   border: ['rounded', 'sharp', 'double', 'heavy', 'ascii', 'none'],
   trigger: ['every', 'daily', 'login', 'manual'],
@@ -754,6 +754,9 @@ async function runRenderer(cfg) {
     } else if (cfg.anim === 'pendulum') {
       rotY = Math.sin(elapsed * 2.2 * speedMult) * 0.68;
     } else if (cfg.anim === 'bounce') {
+      rotY = 0;
+      offsetY = Math.abs(Math.sin(elapsed * 4.0 * speedMult)) * -2.2 + 1.0;
+    } else if (cfg.anim === 'bounce+rotate') {
       rotY = elapsed * 1.1 * speedMult;
       offsetY = Math.abs(Math.sin(elapsed * 4.0 * speedMult)) * -2.2 + 1.0;
     } else if (cfg.anim === 'pulse') {
@@ -778,9 +781,9 @@ async function runRenderer(cfg) {
     if (isCitrus && renderGeometry) {
       // Superior citrus rendering with proper lighting
       const PTS = renderGeometry;
-      const scale50 = 50.0;
+      const scale50 = 50.0 * scale;
       const halfW = W >> 1;
-      const halfH = (subH >> 1) + 2;
+      const halfH = ((subH >> 1) + 2 + offsetY * 3) | 0;
 
       for (let i = 0; i < PTS.length; i += 7) {
         const px = PTS[i];
@@ -863,8 +866,8 @@ async function runRenderer(cfg) {
         const depth = fov + z2;
         if (depth <= 2) continue;
 
-        const projX = Math.round(W / 2 + (x3 * fov) / depth * 1.55);
-        const aspectY = cfg.look === 'blocks' ? 1.65 : 0.82;
+        const projX = Math.round(W / 2 + (x3 * fov) / depth * 2.15);
+        const aspectY = cfg.look === 'blocks' ? 2.30 : 1.15;
         const projY = Math.round(subH / 2 - (y3 * fov) / depth * aspectY);
 
         if (projX >= 0 && projX < W && projY >= 0 && projY < subH) {
