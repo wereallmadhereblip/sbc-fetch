@@ -83,3 +83,55 @@ sbc-fetch --set-trigger daily --set-greeting "Welcome back, \$USER!"
 | **Borders** | `rounded`, `sharp`, `double`, `heavy`, `ascii`, `none` |
 | **Triggers** | `every` (new tab), `daily` (once a day), `login` (login shells only), `manual` |
 | **Duration** | `0` (continuous until keypress), or `1`–`60` seconds auto-exit |
+
+---
+
+## 🔄 Update to Latest Version
+
+Check for updates and automatically pull the latest changes:
+
+```bash
+sbc-fetch --update
+# or
+sbc-fetch --upgrade
+```
+
+This command:
+1. Checks if your installation is a git repository
+2. Fetches latest changes from the remote repository
+3. Pulls and applies updates if a newer version is available
+4. Reports the current and latest commit hashes
+
+**Example:**
+```
+📦 Checking for updates...
+⬇️  Updating from abc1234 to def5678...
+✅ Update complete! sbc-fetch has been updated to the latest version.
+💡 Run "sbc-fetch" to see the latest features!
+```
+
+---
+
+## 🎯 System MOTD (Message of the Day) Management
+
+**sbc-fetch** automatically detects and suppresses system MOTD (Message of the Day) during animation for a clean, distraction-free full-screen display. After you exit the animation, your system MOTD is automatically restored.
+
+Check your current MOTD configuration:
+
+```bash
+sbc-fetch --motd-info
+```
+
+**Example:**
+```
+🎯 MOTD Configuration Status:
+  /etc/motd:       ✗ Not found
+  /etc/motd.d:     ✓ Directory exists
+  PAM MOTD:        ✓ Enabled
+  Systemd MOTD:    ✗ Not available
+
+ℹ️  sbc-fetch automatically suppresses MOTD during animation for clean display.
+```
+
+---
+

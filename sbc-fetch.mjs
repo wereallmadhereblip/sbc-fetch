@@ -148,6 +148,59 @@ function restoreMotd() {
   } catch {}
 }
 
+// App Update Trigger
+function getInstallDir() {
+  try {
+    const result = execSync('npm list -g sbc-fetch --depth=0', { stdio: 'pipe', encoding: 'utf8' });
+    const match = result.match(/(?:^|\n).*sbc-fetch@.*\s+(.+)$/m);
+    if (match?.[1]) {
+      const path = match[1].trim();
+      return path.endsWith('/lib/node_modules/sbc-fetch') ? path : null;
+    }
+  } catch {}
+  return null;
+}
+
+function updateApp() {
+  const installDir = getInstallDir();
+  
+  if (!installDir) {
+    console.log('❌ sbc-fetch was not installed via npm globally.');
+    console.log('💡 Try: npm install -g sbc-fetch');
+    return false;
+  }
+
+  try {
+    if (!existsSync(join(installDir, '.git'))) {
+      console.log('❌ Git repository not found at installation directory.');
+      console.log('💡 Reinstall with: npm install -g sbc-fetch');
+      return false;
+    }
+
+    console.log('📦 Checking for updates...');
+    const currentCommit = execSync('git rev-parse HEAD', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
+    
+    execSync('git fetch origin', { cwd: installDir });
+    const remoteCommit = execSync('git rev-parse origin/main', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
+
+    if (currentCommit === remoteCommit) {
+      console.log('✅ sbc-fetch is already up to date! (commit: ' + currentCommit + ')');
+      return true;
+    }
+
+    console.log(`⬇️  Updating from ${currentCommit} to ${remoteCommit}...`);
+    execSync('git pull origin main', { cwd: installDir });
+    
+    console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+    console.log('💡 Run "sbc-fetch" to see the latest features!');
+    return true;
+  } catch (error) {
+    console.log('❌ Update failed: ' + error.message);
+    console.log('💡 Try manual reinstall: npm install -g sbc-fetch');
+    return false;
+  }
+}
+
 // Detect SBC first, fallback to Linux OS
 function detectPlatform() {
   let model = '';
@@ -652,6 +705,10 @@ async function main() {
       console.log(`  PAM MOTD:        ${status.pamMotdEnabled ? '✓ Enabled' : '✗ Not configured'}`);
       console.log(`  Systemd MOTD:    ${status.systemdMotd ? '✓ Available' : '✗ Not available'}`);
       console.log('\nℹ️  sbc-fetch automatically suppresses MOTD during animation for clean display.');
+      return;
+    }
+    else if (a === '--update' || a === '--upgrade') {
+      updateApp();
       return;
     }
   }
