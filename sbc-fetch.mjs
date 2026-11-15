@@ -79,6 +79,75 @@ function saveConfig(cfg) {
   writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n');
 }
 
+// MOTD (Message of the Day) Management
+const MOTD_PATHS = ['/etc/motd', '/etc/motd.d'];
+const MOTD_STATE = { original: null, disabled: false, files: [] };
+
+function detectMotdStatus() {
+  const status = {
+    staticMotd: null,
+    dynamicMotdDir: null,
+    pamMotdEnabled: null,
+    systemdMotd: null
+  };
+
+  try {
+    if (existsSync('/etc/motd')) {
+      status.staticMotd = readFileSync('/etc/motd', 'utf8');
+    }
+  } catch {}
+
+  try {
+    if (existsSync('/etc/motd.d')) {
+      status.dynamicMotdDir = true;
+    }
+  } catch {}
+
+  try {
+    if (existsSync('/etc/pam.d/login') || existsSync('/etc/pam.d/sshd')) {
+      const loginFile = existsSync('/etc/pam.d/login') ? readFileSync('/etc/pam.d/login', 'utf8') : '';
+      const sshdFile = existsSync('/etc/pam.d/sshd') ? readFileSync('/etc/pam.d/sshd', 'utf8') : '';
+      status.pamMotdEnabled = loginFile.includes('pam_motd') || sshdFile.includes('pam_motd');
+    }
+  } catch {}
+
+  try {
+    if (existsSync('/run/motd.dynamic')) {
+      status.systemdMotd = true;
+    }
+  } catch {}
+
+  return status;
+}
+
+function suppressMotd() {
+  try {
+    MOTD_STATE.original = detectMotdStatus();
+    
+    if (MOTD_STATE.original.staticMotd !== null) {
+      MOTD_STATE.files.push({ path: '/etc/motd', exists: true });
+      try {
+        writeFileSync('/etc/motd', '');
+        MOTD_STATE.disabled = true;
+      } catch (e) {
+        // Likely no permissions; that's okay
+      }
+    }
+  } catch {}
+}
+
+function restoreMotd() {
+  try {
+    if (MOTD_STATE.disabled && MOTD_STATE.original?.staticMotd) {
+      try {
+        writeFileSync('/etc/motd', MOTD_STATE.original.staticMotd);
+      } catch (e) {
+        // Likely no permissions; that's okay
+      }
+    }
+  } catch {}
+}
+
 // Detect SBC first, fallback to Linux OS
 function detectPlatform() {
   let model = '';
@@ -323,9 +392,12 @@ async function runRenderer(cfg) {
   const startTime = Date.now();
   let running = true;
 
+  suppressMotd();
+
   const cleanup = () => {
     if (!running) return;
     running = false;
+    restoreMotd();
     process.stdout.write('\x1b[?25h\x1b[0m\n');
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
@@ -572,6 +644,16 @@ async function main() {
     else if (a === '--set-duration' && next) { cfg.duration = parseInt(next, 10) || 0; previewCfg.duration = cfg.duration; shouldSave = true; i++; }
     else if (a === '--set-showTip') { cfg.showTip = true; previewCfg.showTip = true; shouldSave = true; }
     else if (a === '--no-tip') { cfg.showTip = false; previewCfg.showTip = false; shouldSave = true; }
+    else if (a === '--motd-info') {
+      const status = detectMotdStatus();
+      console.log('🎯 MOTD Configuration Status:');
+      console.log(`  /etc/motd:       ${status.staticMotd !== null ? '✓ Exists' : '✗ Not found'}`);
+      console.log(`  /etc/motd.d:     ${status.dynamicMotdDir ? '✓ Directory exists' : '✗ Not found'}`);
+      console.log(`  PAM MOTD:        ${status.pamMotdEnabled ? '✓ Enabled' : '✗ Not configured'}`);
+      console.log(`  Systemd MOTD:    ${status.systemdMotd ? '✓ Available' : '✗ Not available'}`);
+      console.log('\nℹ️  sbc-fetch automatically suppresses MOTD during animation for clean display.');
+      return;
+    }
   }
 
   if (shouldSave) {
