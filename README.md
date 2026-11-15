@@ -1,7 +1,8 @@
 # 🍊 sbc-fetch
 
-A zero-dependency, 60 FPS real-time 3D animated system fetch and interactive MOTD / terminal welcome screen built for Single Board Computers (Orange Pi, Raspberry Pi, Radxa, Banana Pi, Jetson) and Linux distributions (Debian, Ubuntu, Arch, Fedora, Armbian).
+A zero-dependency, 60 FPS real-time 3D animated system fetch and interactive MOTD / terminal welcome screen built for **Linux** Single Board Computers (Orange Pi, Raspberry Pi, Radxa, Banana Pi, Jetson) and Linux distributions (Debian, Ubuntu, Arch, Fedora, Armbian).
 
+**Requirements:** Linux OS with Node.js v18+ and Fastfetch  
 Powered by **Node.js** and **Fastfetch** with synchronized terminal rendering (`\x1b[?2026h`), dirty-row diffing, and automatic hardware/OS detection.
 
 ---
@@ -33,8 +34,14 @@ Powered by **Node.js** and **Fastfetch** with synchronized terminal rendering (`
 
 ## 🚀 Quick Install
 
+**Linux (one-liner):**
 ```bash
-git clone https://github.com
+sudo bash -c 'git clone https://github.com/wereallmadhereblip/sbc-fetch /tmp/sbc-fetch && cd /tmp/sbc-fetch && chmod +x install.sh && ./install.sh'
+```
+
+**Or manually:**
+```bash
+git clone https://github.com/wereallmadhereblip/sbc-fetch
 cd sbc-fetch
 chmod +x install.sh
 sudo ./install.sh
