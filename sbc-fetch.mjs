@@ -168,37 +168,41 @@ function updateApp() {
   
   if (!installDir) {
     console.log('❌ sbc-fetch was not installed via npm globally.');
-    console.log('💡 Try: npm install -g sbc-fetch');
+    console.log('💡 Try: npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git');
     return false;
   }
 
   try {
-    if (!existsSync(join(installDir, '.git'))) {
-      console.log('❌ Git repository not found at installation directory.');
-      console.log('💡 Reinstall with: npm install -g sbc-fetch');
-      return false;
-    }
+    // If .git exists, use git pull
+    if (existsSync(join(installDir, '.git'))) {
+      console.log('📦 Checking for updates...');
+      const currentCommit = execSync('git rev-parse HEAD', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
+      
+      execSync('git fetch origin', { cwd: installDir });
+      const remoteCommit = execSync('git rev-parse origin/main', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
 
-    console.log('📦 Checking for updates...');
-    const currentCommit = execSync('git rev-parse HEAD', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
-    
-    execSync('git fetch origin', { cwd: installDir });
-    const remoteCommit = execSync('git rev-parse origin/main', { cwd: installDir, encoding: 'utf8' }).trim().slice(0, 7);
+      if (currentCommit === remoteCommit) {
+        console.log('✅ sbc-fetch is already up to date! (commit: ' + currentCommit + ')');
+        return true;
+      }
 
-    if (currentCommit === remoteCommit) {
-      console.log('✅ sbc-fetch is already up to date! (commit: ' + currentCommit + ')');
+      console.log(`⬇️  Updating from ${currentCommit} to ${remoteCommit}...`);
+      execSync('git pull origin main', { cwd: installDir });
+      
+      console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+      console.log('💡 Run "sbc-fetch" to see the latest features!');
       return true;
     }
 
-    console.log(`⬇️  Updating from ${currentCommit} to ${remoteCommit}...`);
-    execSync('git pull origin main', { cwd: installDir });
-    
+    // If no .git (npm install from git URL), reinstall to get latest version
+    console.log('📦 Reinstalling latest version...');
+    execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
     console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
     console.log('💡 Run "sbc-fetch" to see the latest features!');
     return true;
   } catch (error) {
     console.log('❌ Update failed: ' + error.message);
-    console.log('💡 Try manual reinstall: npm install -g sbc-fetch');
+    console.log('💡 Try manual reinstall: npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git');
     return false;
   }
 }
