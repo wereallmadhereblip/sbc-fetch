@@ -648,11 +648,12 @@ async function runRenderer(cfg) {
   };
   const detailLevel = detailLevelMap[cfg.detail] || detailLevelMap.high;
 
-  const W = Math.ceil(34 * detailLevel.resolution);
-  const H = Math.ceil(18 * detailLevel.resolution);
+  // Maximize terminal usage: 3D logo gets 50% width, info gets 50%
+  const W = Math.ceil(50 * detailLevel.resolution);  // Increased from 34 to 50
+  const H = Math.ceil(24 * detailLevel.resolution);  // Increased from 18 to 24
   const subH = cfg.look === 'blocks' ? H * 2 : H;
-  const infoWidth = 48;
-  const totalWidth = W + infoWidth + 5;
+  const infoWidth = 60;  // Increased from 48 to 60
+  const totalWidth = W + infoWidth + 6;
 
   const ASCII_RAMP = '.,-~:;=!*#$@';
   const DETAIL_RAMP = detailLevel.chars;
