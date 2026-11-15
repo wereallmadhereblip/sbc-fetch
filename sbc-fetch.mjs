@@ -31,22 +31,22 @@ const OPTIONS = {
   trigger: ['every', 'daily', 'login', 'manual']
 };
 
-// ANSI TrueColor Themes [R, G, B]
+// xterm-256 Color Gradients (matching fetch-anim.mjs aesthetic)
 const THEMES = {
-  orangepi:    { primary: [255, 125, 20],  secondary: [72, 199, 116],  border: [255, 155, 60],  accent: [255, 200, 90] },
-  raspberrypi: { primary: [214, 38, 86],   secondary: [85, 195, 95],   border: [230, 80, 120],  accent: [255, 140, 175] },
-  radxa:       { primary: [65, 185, 115],  secondary: [130, 225, 165], border: [85, 205, 135],  accent: [180, 245, 205] },
-  jetson:      { primary: [118, 185, 0],   secondary: [195, 235, 90],  border: [140, 205, 35],  accent: [215, 250, 130] },
-  bananapi:    { primary: [245, 200, 35],  secondary: [95, 185, 75],   border: [250, 215, 80],  accent: [255, 240, 145] },
-  debian:      { primary: [215, 10, 83],   secondary: [245, 110, 155], border: [200, 45, 95],   accent: [255, 150, 185] },
-  ubuntu:      { primary: [233, 84, 32],   secondary: [168, 65, 118],  border: [233, 115, 70],  accent: [255, 175, 135] },
-  arch:        { primary: [23, 147, 209],  secondary: [115, 205, 245], border: [55, 165, 225],  accent: [155, 225, 255] },
-  fedora:      { primary: [60, 110, 180],  secondary: [120, 175, 240], border: [85, 140, 215],  accent: [165, 205, 255] },
-  red:         { primary: [235, 50, 50],   secondary: [255, 135, 110], border: [220, 75, 75],   accent: [255, 175, 160] },
-  matrix:      { primary: [0, 225, 65],    secondary: [135, 255, 165], border: [0, 175, 50],    accent: [175, 255, 195] },
-  cyberpunk:   { primary: [255, 42, 165],  secondary: [0, 235, 245],   border: [185, 75, 255],  accent: [95, 245, 255] },
-  nord:        { primary: [136, 192, 208], secondary: [163, 190, 140], border: [129, 161, 193], accent: [235, 203, 139] },
-  dracula:     { primary: [189, 147, 249], secondary: [255, 121, 198], border: [98, 114, 164],  accent: [80, 250, 123] }
+  orangepi:    { gradient: [229, 222, 221, 220, 215, 214, 209, 208, 202, 166, 160, 124], primary: [255, 125, 20] },
+  raspberrypi: { gradient: [218, 217, 211, 205, 199, 169, 168, 162, 161, 125, 95, 89],   primary: [214, 38, 86] },
+  radxa:       { gradient: [157, 156, 150, 144, 108, 107, 66, 65, 64, 59, 58, 23],       primary: [65, 185, 115] },
+  jetson:      { gradient: [154, 148, 142, 136, 130, 100, 106, 149, 192, 226, 220, 227], primary: [118, 185, 0] },
+  bananapi:    { gradient: [220, 214, 208, 202, 196, 190, 226, 227, 190, 184, 178, 142], primary: [245, 200, 35] },
+  debian:      { gradient: [169, 168, 162, 161, 125, 95, 89, 88, 82, 125, 168, 204],     primary: [215, 10, 83] },
+  ubuntu:      { gradient: [215, 209, 203, 202, 208, 166, 172, 178, 208, 214, 220, 226], primary: [233, 84, 32] },
+  arch:        { gradient: [32, 33, 39, 45, 51, 81, 87, 123, 159, 195, 231, 159],        primary: [23, 147, 209] },
+  fedora:      { gradient: [17, 18, 24, 25, 31, 32, 60, 61, 67, 103, 109, 145],          primary: [60, 110, 180] },
+  red:         { gradient: [196, 208, 209, 210, 211, 203, 167, 173, 179, 210, 216, 222], primary: [235, 50, 50] },
+  matrix:      { gradient: [28, 34, 40, 46, 47, 82, 83, 118, 119, 154, 155, 190],        primary: [0, 225, 65] },
+  cyberpunk:   { gradient: [201, 200, 199, 198, 197, 196, 162, 168, 174, 213, 219, 225], primary: [255, 42, 165] },
+  nord:        { gradient: [66, 67, 73, 109, 110, 145, 152, 188, 189, 195, 231, 232],    primary: [136, 192, 208] },
+  dracula:     { gradient: [98, 97, 96, 95, 54, 53, 52, 139, 140, 139, 183, 183],        primary: [189, 147, 249] }
 };
 
 const BORDERS = {
@@ -334,7 +334,8 @@ async function runRenderer(cfg) {
 
     const user = process.env.USER || userInfo().username || 'user';
     const msg = cfg.greeting.replace(/\$USER/g, user);
-    console.log(`${rgb(theme.accent)}\x1b[1m${msg}\x1b[0m`);
+    const accentColor = theme.gradient[theme.gradient.length - 1];
+    console.log(`\x1b[38;5;${accentColor}m\x1b[1m${msg}\x1b[0m`);
     if (cfg.showTip) {
       const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
       console.log(`\x1b[2m💡 ${tip}\x1b[0m`);
@@ -421,7 +422,7 @@ async function runRenderer(cfg) {
     }
 
     const lines = [];
-    const bCol = rgb(theme.border);
+    const bCol = `\x1b[38;5;208m`;
     const rst = '\x1b[0m';
 
     lines.push(`${bCol}${box.tl}${box.h.repeat(W + 2)}${box.h.repeat(infoWidth + 2)}${box.tr}${rst}`);
@@ -438,19 +439,23 @@ async function runRenderer(cfg) {
           if (!hasTop && !hasBot) {
             artRow += ' ';
           } else if (hasTop && hasBot) {
-            const topLight = Math.max(0.45, Math.min(1.25, (zBuf[topIdx] + 9) / 14));
-            const botLight = Math.max(0.45, Math.min(1.25, (zBuf[botIdx] + 9) / 14));
-            const topCol = shade(cBuf[topIdx] === 2 ? theme.secondary : theme.primary, topLight);
-            const botCol = shade(cBuf[botIdx] === 2 ? theme.secondary : theme.primary, botLight);
-            artRow += `${rgb(topCol)}${rgb(botCol, true)}▀${rst}`;
+            const topLight = Math.max(0, Math.min(0.99, (zBuf[topIdx] + 9) / 15));
+            const botLight = Math.max(0, Math.min(0.99, (zBuf[botIdx] + 9) / 15));
+            const topGradIdx = Math.floor(topLight * (theme.gradient.length - 1));
+            const botGradIdx = Math.floor(botLight * (theme.gradient.length - 1));
+            const topCol = theme.gradient[topGradIdx];
+            const botCol = theme.gradient[botGradIdx];
+            artRow += `\x1b[38;5;${topCol};48;5;${botCol}m▀${rst}`;
           } else if (hasTop) {
-            const topLight = Math.max(0.45, Math.min(1.25, (zBuf[topIdx] + 9) / 14));
-            const topCol = shade(cBuf[topIdx] === 2 ? theme.secondary : theme.primary, topLight);
-            artRow += `${rgb(topCol)}▀${rst}`;
+            const topLight = Math.max(0, Math.min(0.99, (zBuf[topIdx] + 9) / 15));
+            const topGradIdx = Math.floor(topLight * (theme.gradient.length - 1));
+            const topCol = theme.gradient[topGradIdx];
+            artRow += `\x1b[38;5;${topCol}m▀${rst}`;
           } else {
-            const botLight = Math.max(0.45, Math.min(1.25, (zBuf[botIdx] + 9) / 14));
-            const botCol = shade(cBuf[botIdx] === 2 ? theme.secondary : theme.primary, botLight);
-            artRow += `${rgb(botCol)}▄${rst}`;
+            const botLight = Math.max(0, Math.min(0.99, (zBuf[botIdx] + 9) / 15));
+            const botGradIdx = Math.floor(botLight * (theme.gradient.length - 1));
+            const botCol = theme.gradient[botGradIdx];
+            artRow += `\x1b[38;5;${botCol}m▄${rst}`;
           }
         } else {
           const idx = row * W + col;
@@ -458,7 +463,8 @@ async function runRenderer(cfg) {
             artRow += ' ';
           } else {
             const normZ = Math.max(0, Math.min(0.99, (zBuf[idx] + 8) / 16));
-            const colRgb = shade(cBuf[idx] === 2 ? theme.secondary : theme.primary, 0.5 + normZ * 0.75);
+            const gradIdx = Math.floor(normZ * (theme.gradient.length - 1));
+            const colCode = theme.gradient[gradIdx];
             let ch = '#';
             if (cfg.look === 'ascii') {
               ch = ASCII_RAMP[Math.floor(normZ * ASCII_RAMP.length)];
@@ -467,7 +473,7 @@ async function runRenderer(cfg) {
             } else if (cfg.look === 'braille') {
               ch = BRAILLE_RAMP[Math.floor(normZ * BRAILLE_RAMP.length)];
             }
-            artRow += `${rgb(colRgb)}${ch}${rst}`;
+            artRow += `\x1b[38;5;${colCode}m${ch}${rst}`;
           }
         }
       }
@@ -476,15 +482,17 @@ async function runRenderer(cfg) {
       const cleanInfo = rawInfo.replace(/\x1b\[[0-9;]*m/g, '');
       const pad = Math.max(0, infoWidth - cleanInfo.length);
       let styledInfo = rawInfo;
+      const accentCode = theme.gradient[theme.gradient.length - 1];
+      const primaryCode = theme.gradient[Math.floor(theme.gradient.length * 0.7)];
       if (row === 0) {
-        styledInfo = `${rgb(theme.accent)}\x1b[1m${cleanInfo.slice(0, infoWidth)}${rst}${' '.repeat(pad)}`;
+        styledInfo = `\x1b[38;5;${accentCode}m\x1b[1m${cleanInfo.slice(0, infoWidth)}${rst}${' '.repeat(pad)}`;
       } else if (cleanInfo.includes(':')) {
         const [k, ...rest] = cleanInfo.split(':');
         const val = rest.join(':');
         const trimmed = `${k}:${val}`.slice(0, infoWidth);
         const kPart = trimmed.split(':')[0];
         const vPart = trimmed.slice(kPart.length);
-        styledInfo = `${rgb(theme.primary)}\x1b[1m${kPart}${rst}${vPart}${' '.repeat(Math.max(0, infoWidth - trimmed.length))}`;
+        styledInfo = `\x1b[38;5;${primaryCode}m\x1b[1m${kPart}${rst}${vPart}${' '.repeat(Math.max(0, infoWidth - trimmed.length))}`;
       } else {
         styledInfo = `${cleanInfo.slice(0, infoWidth)}${' '.repeat(pad)}`;
       }
