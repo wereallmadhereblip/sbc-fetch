@@ -253,27 +253,103 @@ function detectPlatform() {
   return 'tux';
 }
 
-// Generate 3D Voxel Point Clouds [x, y, z, colorSlot (1=primary, 2=secondary)]
+// Build detailed 3D citrus geometry with proper lighting
+function buildCitrusGeometry() {
+  const rawPts = [];
+
+  const yOffset = -0.22;
+  const zDepth = 0.24;
+  const zLayers = [-zDepth, 0, zDepth];
+
+  function addExtrudedPoint(x, y, nxEdge, nyEdge, partId) {
+    for (let k = 0; k < zLayers.length; k++) {
+      const z = zLayers[k];
+      const isCap = k !== 1;
+      const nz = isCap ? (z > 0 ? 0.92 : -0.92) : 0.0;
+      const nx = isCap ? nxEdge * 0.35 : nxEdge;
+      const ny = isCap ? nyEdge * 0.35 : nyEdge;
+      rawPts.push(x, y + yOffset, z, nx, ny, nz, partId);
+    }
+  }
+
+  // Scalloped Outer Rind
+  for (let i = 0; i < 260; i++) {
+    const theta = (i / 260) * Math.PI * 2;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    const rOuter = 1.44 + 0.065 * Math.cos(12 * theta);
+    for (let r = 1.15; r <= rOuter; r += 0.038) {
+      addExtrudedPoint(r * cosT, r * sinT, cosT, sinT, 0);
+    }
+  }
+
+  // Center Hub
+  for (let i = 0; i < 72; i++) {
+    const theta = (i / 72) * Math.PI * 2;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    for (let r = 0; r <= 0.14; r += 0.038) {
+      addExtrudedPoint(r * cosT, r * sinT, cosT, sinT, 0);
+    }
+  }
+
+  // 8 Radial Spokes
+  for (let s = 0; s < 8; s++) {
+    const spokeAngle = (s / 8) * Math.PI * 2 + Math.PI / 8;
+    const cosA = Math.cos(spokeAngle);
+    const sinA = Math.sin(spokeAngle);
+    const px = -sinA;
+    const py = cosA;
+    for (let r = 0.12; r <= 1.16; r += 0.034) {
+      for (let w = -0.034; w <= 0.034; w += 0.017) {
+        addExtrudedPoint(r * cosA + w * px, r * sinA + w * py, px, py, 0);
+      }
+    }
+  }
+
+  // 8 Teardrop Seeds
+  for (let s = 0; s < 8; s++) {
+    const seedAngle = (s / 8) * Math.PI * 2;
+    const cosA = Math.cos(seedAngle);
+    const sinA = Math.sin(seedAngle);
+    const px = -sinA;
+    const py = cosA;
+    for (let u = 0; u <= 1; u += 0.065) {
+      const r = 0.22 + u * 0.32;
+      const halfWidth = Math.sin(Math.pow(u, 0.65) * Math.PI) * 0.088;
+      for (let w = -halfWidth; w <= halfWidth; w += 0.022) {
+        addExtrudedPoint(r * cosA + w * px, r * sinA + w * py, cosA, sinA, 0);
+      }
+    }
+  }
+
+  // Two Green Leaves on Top
+  for (let u = 0; u <= 1; u += 0.03) {
+    const sx = -0.05 - u * 0.42;
+    const sy = 1.54 + u * 0.46 + Math.sin(u * Math.PI) * 0.06;
+    const halfW = Math.sin(Math.pow(u, 0.7) * Math.PI) * 0.14;
+    for (let w = -halfW; w <= halfW; w += 0.024) {
+      addExtrudedPoint(sx + w * 0.7, sy - w * 0.7, -0.5, 0.85, 1);
+    }
+  }
+  for (let u = 0; u <= 1; u += 0.025) {
+    const sx = 0.04 + u * 0.96;
+    const sy = 1.54 + Math.sin(u * Math.PI * 0.75) * 0.44 + u * 0.12;
+    const halfW = Math.sin(Math.pow(u, 0.68) * Math.PI) * 0.24;
+    for (let w = -halfW; w <= halfW; w += 0.024) {
+      addExtrudedPoint(sx - w * 0.35, sy + w * 0.92, 0.3, 0.92, 1);
+    }
+  }
+
+  return new Float32Array(rawPts);
+}
+
+// Generate 3D Voxel Point Clouds (fallback for non-orange logos)
 function buildVoxels(type) {
   const pts = [];
   const add = (x, y, z, c = 1) => pts.push([x, y, z, c]);
 
-  if (type === 'orangepi' || type === 'ubuntu') {
-    for (let u = 0; u < Math.PI * 2; u += 0.16) {
-      for (let v = 0; v < Math.PI * 2; v += 0.28) {
-        const R = 6.2, r = 2.1;
-        const x = (R + r * Math.cos(v)) * Math.cos(u);
-        const y = (R + r * Math.cos(v)) * Math.sin(u) - 0.8;
-        const z = r * Math.sin(v);
-        add(x, y, z, 1);
-      }
-    }
-    for (let lx = -2.2; lx <= 2.8; lx += 0.6) {
-      for (let lz = -1.0; lz <= 1.0; lz += 0.6) {
-        add(lx + 1.2, 8.2 + Math.sin(lx) * 0.8, lz, 2);
-      }
-    }
-  } else if (type === 'bananapi') {
+  if (type === 'bananapi') {
     for (let t = -1.1; t <= 1.1; t += 0.08) {
       const cx = Math.sin(t) * 6.5;
       const cy = Math.cos(t) * 5.0 - 2.0;
@@ -455,7 +531,11 @@ async function runConfigMenu(cfg) {
   }
 }
 
-// 60 FPS Synchronized 3D Renderer
+// Color gradients for superior lighting
+const ORANGE_GRADIENT = [229, 222, 221, 220, 215, 214, 209, 208, 202, 166, 160, 124];
+const LEAF_GRADIENT = [155, 119, 83, 77, 41, 34];
+
+// 60 FPS Synchronized 3D Renderer with Proper Lighting
 async function runRenderer(cfg) {
   const detected = detectPlatform();
   const activeLogo = cfg.logo === 'auto' ? detected : cfg.logo;
@@ -463,7 +543,15 @@ async function runRenderer(cfg) {
   const theme = THEMES[activeThemeName] || THEMES.orangepi;
   const box = BORDERS[cfg.border] || BORDERS.rounded;
 
-  const voxels = buildVoxels(activeLogo);
+  // Use superior citrus geometry for orange-themed displays
+  let renderGeometry = null;
+  let isCitrus = false;
+  if (activeLogo === 'orangepi' || activeThemeName === 'orangepi') {
+    renderGeometry = buildCitrusGeometry();
+    isCitrus = true;
+  }
+
+  const voxels = isCitrus ? null : buildVoxels(activeLogo);
   const sysLines = getSystemInfo();
 
   // Detail level affects resolution and character set
@@ -563,36 +651,122 @@ async function runRenderer(cfg) {
     const cosZ = Math.cos(rotZ), sinZ = Math.sin(rotZ);
 
     const zBuf = new Float32Array(W * subH).fill(-999);
-    const cBuf = new Uint8Array(W * subH);
+    const rawColor = new Int16Array(W * subH).fill(-1);
 
-    for (let i = 0; i < voxels.length; i++) {
-      let [x, y, z, slot] = voxels[i];
-      x *= scale;
-      y = (y + offsetY) * scale;
-      z *= scale;
+    if (isCitrus && renderGeometry) {
+      // Superior citrus rendering with proper lighting
+      const PTS = renderGeometry;
+      const scale50 = 50.0;
+      const halfW = W >> 1;
+      const halfH = (subH >> 1) + 2;
 
-      let x1 = x * cosY - z * sinY;
-      let z1 = x * sinY + z * cosY;
-      let y2 = y * cosX - z1 * sinX;
-      let z2 = y * sinX + z1 * cosX;
-      let x3 = x1 * cosZ - y2 * sinZ;
-      let y3 = x1 * sinZ + y2 * cosZ;
+      for (let i = 0; i < PTS.length; i += 7) {
+        const px = PTS[i];
+        const py = PTS[i + 1];
+        const pz = PTS[i + 2];
 
-      const fov = 26;
-      const depth = fov + z2;
-      if (depth <= 2) continue;
+        const x1 = px * cosY + pz * sinY;
+        const z1 = -px * sinY + pz * cosY;
+        const y2 = py * cosX - z1 * sinX;
+        const z2 = py * sinX + z1 * cosX;
 
-      const projX = Math.round(W / 2 + (x3 * fov) / depth * 1.55);
-      const aspectY = cfg.look === 'blocks' ? 1.65 : 0.82;
-      const projY = Math.round(subH / 2 - (y3 * fov) / depth * aspectY);
+        const ooz = 1 / (4.9 + z2);
+        const xp = (halfW + scale50 * ooz * x1) | 0;
+        const yp = (halfH - scale50 * ooz * y2) | 0;
 
-      if (projX >= 0 && projX < W && projY >= 0 && projY < subH) {
-        const idx = projY * W + projX;
-        if (z2 > zBuf[idx]) {
-          zBuf[idx] = z2;
-          cBuf[idx] = slot;
+        if (xp >= 1 && xp < W - 1 && yp >= 1 && yp < subH - 1) {
+          const idx = xp + yp * W;
+          if (ooz > zBuf[idx]) {
+            zBuf[idx] = ooz;
+            const nx = PTS[i + 3];
+            const ny = PTS[i + 4];
+            const nz = PTS[i + 5];
+            const nx1 = nx * cosY + nz * sinY;
+            const nz1 = -nx * sinY + nz * cosY;
+            const ny2 = ny * cosX - nz1 * sinX;
+            const nz2 = ny * sinX + nz1 * cosX;
+
+            const light = Math.max(0, Math.min(1, Math.abs(nz2) * 0.68 - nx1 * 0.32 + ny2 * 0.42 + 0.22));
+            if (PTS[i + 6] === 1) {
+              const leafIdx = Math.min(Math.max(0, ((1 - light) * 6) | 0), 5);
+              rawColor[idx] = LEAF_GRADIENT[leafIdx];
+            } else {
+              const gradPos = (yp / (subH - 1)) * 0.65 + (1 - light) * 0.35;
+              const idx12 = Math.min(Math.max(0, (gradPos * 12) | 0), 11);
+              rawColor[idx] = ORANGE_GRADIENT[idx12];
+            }
+          }
         }
       }
+
+      // Smooth color interpolation for better quality
+      for (let y = 1; y < subH - 1; y++) {
+        const rowOff = y * W;
+        for (let x = 1; x < W - 1; x++) {
+          const idx = rowOff + x;
+          const c = rawColor[idx];
+          const nUp = rawColor[idx - W];
+          const nDn = rawColor[idx + W];
+          const nLt = rawColor[idx - 1];
+          const nRt = rawColor[idx + 1];
+
+          if (c === -1) {
+            let count = 0;
+            let sample = -1;
+            if (nUp !== -1) { count++; sample = nUp; }
+            if (nDn !== -1) { count++; sample = nDn; }
+            if (nLt !== -1) { count++; sample = nLt; }
+            if (nRt !== -1) { count++; sample = nRt; }
+            if (count >= 3) rawColor[idx] = sample;
+          }
+        }
+      }
+    } else {
+      // Standard voxel rendering
+      const cBuf = new Uint8Array(W * subH);
+      for (let i = 0; i < voxels.length; i++) {
+        let [x, y, z, slot] = voxels[i];
+        x *= scale;
+        y = (y + offsetY) * scale;
+        z *= scale;
+
+        let x1 = x * cosY - z * sinY;
+        let z1 = x * sinY + z * cosY;
+        let y2 = y * cosX - z1 * sinX;
+        let z2 = y * sinX + z1 * cosX;
+        let x3 = x1 * cosZ - y2 * sinZ;
+        let y3 = x1 * sinZ + y2 * cosZ;
+
+        const fov = 26;
+        const depth = fov + z2;
+        if (depth <= 2) continue;
+
+        const projX = Math.round(W / 2 + (x3 * fov) / depth * 1.55);
+        const aspectY = cfg.look === 'blocks' ? 1.65 : 0.82;
+        const projY = Math.round(subH / 2 - (y3 * fov) / depth * aspectY);
+
+        if (projX >= 0 && projX < W && projY >= 0 && projY < subH) {
+          const idx = projY * W + projX;
+          if (z2 > zBuf[idx]) {
+            zBuf[idx] = z2;
+            cBuf[idx] = slot;
+          }
+        }
+      }
+
+      // Convert voxel colors to xterm colors
+      for (let idx = 0; idx < W * subH; idx++) {
+        if (cBuf[idx] > 0) {
+          const light = Math.max(0, Math.min(0.99, (zBuf[idx] + 9) / 15));
+          const gradIdx = Math.floor(light * (theme.gradient.length - 1));
+          rawColor[idx] = theme.gradient[gradIdx];
+        }
+      }
+    }
+
+    const cBuf = new Uint8Array(W * subH);
+    for (let idx = 0; idx < W * subH; idx++) {
+      cBuf[idx] = rawColor[idx] >= 0 ? 1 : 0;
     }
 
     const lines = [];
@@ -607,33 +781,23 @@ async function runRenderer(cfg) {
         if (cfg.look === 'blocks') {
           const topIdx = (row * 2) * W + col;
           const botIdx = (row * 2 + 1) * W + col;
-          const hasTop = cBuf[topIdx] > 0;
-          const hasBot = cBuf[botIdx] > 0;
+          const cTop = rawColor[topIdx];
+          const cBot = rawColor[botIdx];
+          const hasTop = cTop >= 0;
+          const hasBot = cBot >= 0;
 
           if (!hasTop && !hasBot) {
             artRow += ' ';
           } else if (hasTop && hasBot) {
-            const topLight = Math.max(0, Math.min(0.99, (zBuf[topIdx] + 9) / 15));
-            const botLight = Math.max(0, Math.min(0.99, (zBuf[botIdx] + 9) / 15));
-            const topGradIdx = Math.floor(topLight * (theme.gradient.length - 1));
-            const botGradIdx = Math.floor(botLight * (theme.gradient.length - 1));
-            const topCol = theme.gradient[topGradIdx];
-            const botCol = theme.gradient[botGradIdx];
-            artRow += `\x1b[38;5;${topCol};48;5;${botCol}m▀${rst}`;
+            artRow += `\x1b[38;5;${cTop};48;5;${cBot}m▀${rst}`;
           } else if (hasTop) {
-            const topLight = Math.max(0, Math.min(0.99, (zBuf[topIdx] + 9) / 15));
-            const topGradIdx = Math.floor(topLight * (theme.gradient.length - 1));
-            const topCol = theme.gradient[topGradIdx];
-            artRow += `\x1b[38;5;${topCol}m▀${rst}`;
+            artRow += `\x1b[38;5;${cTop}m▀${rst}`;
           } else {
-            const botLight = Math.max(0, Math.min(0.99, (zBuf[botIdx] + 9) / 15));
-            const botGradIdx = Math.floor(botLight * (theme.gradient.length - 1));
-            const botCol = theme.gradient[botGradIdx];
-            artRow += `\x1b[38;5;${botCol}m▄${rst}`;
+            artRow += `\x1b[38;5;${cBot}m▄${rst}`;
           }
         } else {
           const idx = row * W + col;
-          if (cBuf[idx] === 0) {
+          if (rawColor[idx] < 0) {
             artRow += ' ';
           } else {
             const normZ = Math.max(0, Math.min(0.99, (zBuf[idx] + 8) / 16));
