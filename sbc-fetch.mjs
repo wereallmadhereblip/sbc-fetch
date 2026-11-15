@@ -30,7 +30,7 @@ const DEFAULT_CONFIG = {
 
 const OPTIONS = {
   logo: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'tux', 'torus'],
-  theme: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'red', 'matrix', 'cyberpunk', 'nord', 'dracula'],
+  theme: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'red', 'matrix', 'cyberpunk', 'nord', 'dracula', 'nocolor'],
   anim: ['rotate', 'pendulum', 'bounce', 'bounce+rotate', 'pulse', 'tumble', 'wave', 'static'],
   look: ['blocks', 'ascii', 'binary', 'braille', 'halftone', 'dots', 'original'],
   border: ['rounded', 'sharp', 'double', 'heavy', 'ascii', 'none'],
@@ -54,7 +54,8 @@ const THEMES = {
   matrix:      { gradient: [28, 34, 40, 46, 47, 82, 83, 118, 119, 154, 155, 190],        primary: [0, 225, 65] },
   cyberpunk:   { gradient: [201, 200, 199, 198, 197, 196, 162, 168, 174, 213, 219, 225], primary: [255, 42, 165] },
   nord:        { gradient: [66, 67, 73, 109, 110, 145, 152, 188, 189, 195, 231, 232],    primary: [136, 192, 208] },
-  dracula:     { gradient: [98, 97, 96, 95, 54, 53, 52, 139, 140, 139, 183, 183],        primary: [189, 147, 249] }
+  dracula:     { gradient: Array(12).fill(189), primary: 189 },
+  nocolor:     { gradient: Array(12).fill(250), primary: 250 }
 };
 
 const BORDERS = {
@@ -1137,6 +1138,7 @@ async function runRenderer(cfg) {
   const detected = detectPlatform();
   const activeLogo = cfg.logo === 'auto' ? detected : cfg.logo;
   const activeThemeName = cfg.theme === 'auto' ? detected : cfg.theme;
+  const isNoColor = activeThemeName === 'nocolor' || Boolean(process.env.NO_COLOR);
   const theme = THEMES[activeThemeName] || THEMES.orangepi;
   const box = BORDERS[cfg.border] || BORDERS.rounded;
 
@@ -1369,7 +1371,7 @@ async function runRenderer(cfg) {
         }
       }
       out += '\x1b[?2026l';
-      process.stdout.write(out);
+      process.stdout.write(isNoColor ? out.replace(/\x1b\[[0-9;]*m/g, '') : out);
       frameCount++;
       return;
     }
@@ -1659,7 +1661,7 @@ async function runRenderer(cfg) {
       }
     }
     out += '\x1b[?2026l';
-    process.stdout.write(out);
+    process.stdout.write(isNoColor ? out.replace(/\x1b\[[0-9;]*m/g, '') : out);
     frameCount++;
   };
 
