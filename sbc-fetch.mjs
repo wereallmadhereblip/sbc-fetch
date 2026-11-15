@@ -561,6 +561,9 @@ async function main() {
     else if (a === '--set-border' && next) { cfg.border = next; previewCfg.border = next; shouldSave = true; i++; }
     else if (a === '--set-trigger' && next) { cfg.trigger = next; previewCfg.trigger = next; shouldSave = true; i++; }
     else if (a === '--set-greeting' && next) { cfg.greeting = next; previewCfg.greeting = next; shouldSave = true; i++; }
+    else if (a === '--set-duration' && next) { cfg.duration = parseInt(next, 10) || 0; previewCfg.duration = cfg.duration; shouldSave = true; i++; }
+    else if (a === '--set-showTip') { cfg.showTip = true; previewCfg.showTip = true; shouldSave = true; }
+    else if (a === '--no-tip') { cfg.showTip = false; previewCfg.showTip = false; shouldSave = true; }
   }
 
   if (shouldSave) {
