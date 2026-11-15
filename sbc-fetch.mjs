@@ -344,60 +344,109 @@ function buildCitrusGeometry() {
   return new Float32Array(rawPts);
 }
 
-// Generate 3D Voxel Point Clouds (fallback for non-orange logos)
+// Generate High-Detail 3D Geometries for Each Logo
 function buildVoxels(type) {
   const pts = [];
   const add = (x, y, z, c = 1) => pts.push([x, y, z, c]);
 
-  if (type === 'bananapi') {
-    for (let t = -1.1; t <= 1.1; t += 0.08) {
-      const cx = Math.sin(t) * 6.5;
-      const cy = Math.cos(t) * 5.0 - 2.0;
-      const thick = (1.15 - Math.abs(t)) * 1.9 + 0.5;
-      for (let a = 0; a < Math.PI * 2; a += 0.5) {
-        add(cx + Math.cos(a) * thick, cy + Math.sin(a) * thick * 0.6, Math.sin(a) * thick, Math.abs(t) > 0.92 ? 2 : 1);
+  if (type === 'raspberrypi') {
+    // Raspberry Pi: detailed body with GPIO header, cooling features
+    for (let y = -6.5; y <= 5.5; y += 0.45) {
+      const rad = 5.8 * Math.max(0, 1 - Math.abs(y + 0.8) / 8.5);
+      const detail = Math.max(0.2, 1 - Math.abs(y) / 7);
+      for (let a = 0; a < Math.PI * 2; a += 0.25) {
+        add(Math.cos(a) * rad * (1 + Math.sin(a * 3) * 0.08), y, Math.sin(a) * rad * (1 + Math.cos(a * 3) * 0.08), 1);
       }
     }
-  } else if (type === 'raspberrypi') {
-    for (let y = -6; y <= 5; y += 1.1) {
-      const rad = 5.5 * Math.cos((y / 7.5) * (Math.PI / 2));
-      for (let a = 0; a < Math.PI * 2; a += 0.35) {
-        add(Math.cos(a) * rad, y - 0.8, Math.sin(a) * rad, 1);
+    // GPIO header details
+    for (let x = -1.2; x <= 1.2; x += 0.35) {
+      for (let z = -1.8; z <= 1.8; z += 0.35) {
+        add(x * 0.7, 6.0 + Math.sin(x * z) * 0.2, z, 2);
       }
     }
-    for (let a = 0; a < Math.PI * 2; a += 0.4) {
-      for (let r = 1.2; r <= 4.5; r += 1.0) {
-        add(Math.cos(a) * r, 6.2, Math.sin(a) * r * 0.7, 2);
+    // Heatsink ridges
+    for (let a = 0; a < Math.PI * 2; a += 0.6) {
+      for (let r = 4.5; r <= 5.8; r += 0.5) {
+        add(Math.cos(a) * r, -6.0 + Math.sin(r * 2) * 0.3, Math.sin(a) * r, 2);
       }
     }
-  } else if (type === 'arch' || type === 'radxa') {
-    for (let y = -7; y <= 7; y += 0.85) {
-      const span = ((7 - y) / 14) * 7.5;
-      for (let x = -span; x <= span; x += 0.9) {
-        for (let z = -2.0; z <= 2.0; z += 0.9) {
-          if (Math.abs(x) > span * 0.45 || y > 1.5) {
-            add(x, y, z, y > 2 ? 2 : 1);
-          }
+  } else if (type === 'radxa') {
+    // Radxa Rock: angular design with emphasized edges
+    for (let y = -7; y <= 7; y += 0.4) {
+      const width = 6.5 * (1 - Math.abs(y) / 10);
+      const depth = 5.0 * (1 - Math.abs(y) / 10);
+      for (let x = -width; x <= width; x += 0.5) {
+        for (let z = -depth; z <= depth; z += 0.5) {
+          const isEdge = Math.abs(x) > width * 0.75 || Math.abs(z) > depth * 0.75;
+          add(x + Math.sin(y * 0.3) * 0.15, y, z + Math.cos(y * 0.3) * 0.15, isEdge ? 2 : 1);
         }
       }
     }
-  } else if (type === 'debian') {
-    for (let t = 0; t < Math.PI * 3.6; t += 0.12) {
-      const r = 0.6 + t * 0.72;
-      for (let dz = -1.4; dz <= 1.4; dz += 0.7) {
-        add(Math.cos(t) * r, Math.sin(t) * r, dz, t > 7 ? 2 : 1);
+    // LED indicators on edge
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      add(Math.cos(angle) * 6.8, Math.sin(i * 1.5) - 3, Math.sin(angle) * 5.2, 2);
+    }
+  } else if (type === 'jetson') {
+    // Jetson: sleek curved design with GPU emphasis
+    for (let y = -6.5; y <= 6.5; y += 0.35) {
+      const t = y / 6.5;
+      const rad = 5.2 + Math.sin(t * Math.PI) * 1.2;
+      const warp = 1 + Math.sin(t * Math.PI * 2) * 0.15;
+      for (let a = 0; a < Math.PI * 2; a += 0.2) {
+        add(Math.cos(a) * rad * warp, y, Math.sin(a) * rad * Math.cos(t * Math.PI * 0.5), 1);
+      }
+    }
+    // Thermal solution
+    for (let x = -1.5; x <= 1.5; x += 0.3) {
+      for (let z = -1.5; z <= 1.5; z += 0.3) {
+        add(x, 7.0 + Math.abs(x + z) * 0.2, z, 2);
+      }
+    }
+  } else if (type === 'bananapi') {
+    // Banana Pi: curved, organic shape with accent features
+    for (let t = -1.2; t <= 1.2; t += 0.06) {
+      const cx = Math.sin(t * 1.3) * 7.0;
+      const cy = Math.cos(t * 0.8) * 5.2 - 1.5;
+      const thick = (1.2 - Math.abs(t)) * 2.2 + 0.4;
+      for (let a = 0; a < Math.PI * 2; a += 0.3) {
+        add(cx + Math.cos(a) * thick * (1 + Math.sin(a * 2.5) * 0.1), 
+            cy + Math.sin(a) * thick * (0.6 + Math.cos(a * 2) * 0.1), 
+            Math.sin(a) * thick * 0.8, 
+            Math.abs(t) > 0.9 ? 2 : 1);
+      }
+    }
+  } else if (type === 'debian' || type === 'ubuntu' || type === 'fedora' || type === 'arch') {
+    // OS Logos: spiral/swirl design with detail levels
+    const spiralTurns = type === 'debian' ? 4 : type === 'fedora' ? 3.5 : 3.2;
+    const baseRadius = type === 'ubuntu' ? 5.5 : 5.0;
+    const thickness = type === 'arch' ? 1.5 : 1.2;
+    
+    for (let t = 0; t < Math.PI * spiralTurns; t += 0.08) {
+      const r = 0.8 + t * (baseRadius / (Math.PI * spiralTurns));
+      const layers = type === 'fedora' ? 4 : 3;
+      for (let layer = 0; layer < layers; layer++) {
+        const dz = (layer - (layers - 1) / 2) * (thickness / (layers - 1));
+        add(Math.cos(t) * r, Math.sin(t) * r, dz, t > Math.PI * spiralTurns * 0.6 ? 2 : 1);
+      }
+      // Detail rings
+      if (Math.floor(t / (Math.PI / 2)) % 2 === 0) {
+        for (let ring = 0.2; ring < r; ring += r * 0.3) {
+          add(Math.cos(t) * ring, Math.sin(t) * ring, Math.sin(t * 3) * 0.4, 2);
+        }
       }
     }
   } else {
-    for (let y = -7.5; y <= 7.5; y += 0.55) {
-      const angle = y * 0.55;
-      for (let r = 4.2; r <= 5.6; r += 0.7) {
-        add(Math.cos(angle) * r, y, Math.sin(angle) * r, 1);
-        add(Math.cos(angle + Math.PI) * r, y, Math.sin(angle + Math.PI) * r, 2);
-      }
-      if (Math.round(y * 2) % 2 === 0) {
-        for (let b = -4; b <= 4; b += 1.0) {
-          add(Math.cos(angle) * b, y, Math.sin(angle) * b, 2);
+    // Fallback: generic Tux-like penguin silhouette
+    for (let y = -6; y <= 6; y += 0.5) {
+      const bodyWidth = 5.0 * Math.max(0, 1 - Math.abs(y) / 8);
+      const detail = 1 + Math.sin(y * 0.4) * 0.2;
+      for (let x = -bodyWidth; x <= bodyWidth; x += 0.6) {
+        for (let z = -2; z <= 2; z += 0.6) {
+          const distFromEdge = Math.abs(Math.abs(x) - bodyWidth);
+          if (distFromEdge < 1.5 || Math.abs(z) < bodyWidth * 0.4) {
+            add(x, y, z, Math.abs(z) > 1.2 ? 2 : 1);
+          }
         }
       }
     }
