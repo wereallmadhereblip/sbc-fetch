@@ -1,0 +1,31 @@
+{
+  "name": "sbc-fetch",
+  "version": "1.0.0",
+  "description": "60 FPS real-time 3D animated system fetch utility for Linux Single Board Computers",
+  "type": "module",
+  "bin": {
+    "sbc-fetch": "./sbc-fetch.mjs"
+  },
+  "main": "sbc-fetch.mjs",
+  "preferGlobal": true,
+  "keywords": [
+    "sbc",
+    "fetch",
+    "3d",
+    "animation",
+    "orange-pi",
+    "raspberry-pi",
+    "terminal",
+    "motd"
+  ],
+  "author": "wereallmadhereblip",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wereallmadhereblip/sbc-fetch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wereallmadhereblip/sbc-fetch/issues"
+  },
+  "homepage": "https://github.com/wereallmadhereblip/sbc-fetch"
+}
