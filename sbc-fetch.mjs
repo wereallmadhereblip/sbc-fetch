@@ -386,6 +386,9 @@ async function runConfigMenu(cfg) {
     console.log(`  [7] Auto-Exit Timer  : \x1b[1;32m${cfg.duration === 0 ? 'Off (until keypress)' : cfg.duration + 's'}\x1b[0m`);
     console.log(`  [8] Exit Greeting    : \x1b[1;32m${cfg.greeting}\x1b[0m`);
     console.log(`  [9] Post-Exit Tip    : \x1b[1;32m${cfg.showTip ? 'Enabled' : 'Disabled'}\x1b[0m`);
+    console.log(`  [A] Framerate (FPS)  : \x1b[1;32m${cfg.fps || 45}\x1b[0m`);
+    console.log(`  [B] Detail Level     : \x1b[1;32m${cfg.detail || 'high'}\x1b[0m`);
+    console.log(`  [C] Animation Speed  : \x1b[1;32m${cfg.animSpeed || 1.0}x\x1b[0m`);
     console.log('\n  [P] Preview Now      [S] Save & Exit      [Q] Quit Without Saving\n');
 
     const choice = (await ask('Select option: ')).trim().toLowerCase();
@@ -425,6 +428,17 @@ async function runConfigMenu(cfg) {
       if (ans.trim()) cfg.greeting = ans.trim();
     } else if (choice === '9') {
       cfg.showTip = !cfg.showTip;
+    } else if (choice === 'a') {
+      const ans = await ask('Enter FPS (30-120, default 45): ');
+      const num = parseInt(ans, 10);
+      if (!isNaN(num) && num >= 30 && num <= 120) cfg.fps = num;
+    } else if (choice === 'b') {
+      const v = await pickFromList('Detail Levels', OPTIONS.detail);
+      if (v) cfg.detail = v;
+    } else if (choice === 'c') {
+      const ans = await ask('Enter animation speed multiplier (0.5-2.0, default 1.0): ');
+      const num = parseFloat(ans);
+      if (!isNaN(num) && num >= 0.5 && num <= 2.0) cfg.animSpeed = num;
     } else if (choice === 'p') {
       rl.close();
       await runRenderer(cfg);
