@@ -22,17 +22,21 @@ const DEFAULT_CONFIG = {
   showTip: true,
   fps: 30,              // frames per second (30-120) - Zero 4 default is 30
   detail: 'medium',     // low, medium, high - Zero 4 default is medium
-  animSpeed: 1.0        // animation speed multiplier (0.5-2.0)
+  animSpeed: 1.0,       // animation speed multiplier (0.5-2.0)
+  pageEnabled: false,   // true = replace logo + fastfetch with full-screen ASCII page
+  pageStyle: '404-space',
+  pageFastfetch: false  // true = automatically run fastfetch once page finishes loading
 };
 
 const OPTIONS = {
   logo: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'tux', 'torus'],
   theme: ['auto', 'orangepi', 'raspberrypi', 'radxa', 'jetson', 'bananapi', 'debian', 'ubuntu', 'arch', 'fedora', 'red', 'matrix', 'cyberpunk', 'nord', 'dracula'],
   anim: ['rotate', 'pendulum', 'bounce', 'bounce+rotate', 'pulse', 'tumble', 'wave', 'static'],
-  look: ['blocks', 'ascii', 'binary', 'braille'],
+  look: ['blocks', 'ascii', 'binary', 'braille', 'halftone', 'dots', 'original'],
   border: ['rounded', 'sharp', 'double', 'heavy', 'ascii', 'none'],
   trigger: ['every', 'daily', 'login', 'manual'],
-  detail: ['low', 'medium', 'high']
+  detail: ['low', 'medium', 'high'],
+  page: ['404-space', 'christmas', 'progress-loader', 'text-scramble']
 };
 
 // xterm-256 Color Gradients (matching fetch-anim.mjs aesthetic)
@@ -583,6 +587,7 @@ async function runConfigMenu(cfg) {
     console.log(`  [A] Framerate (FPS)  : \x1b[1;32m${cfg.fps || 45}\x1b[0m`);
     console.log(`  [B] Detail Level     : \x1b[1;32m${cfg.detail || 'high'}\x1b[0m`);
     console.log(`  [C] Animation Speed  : \x1b[1;32m${cfg.animSpeed || 1.0}x\x1b[0m`);
+    console.log(`  [D] Pages            : \x1b[1;32m${cfg.pageEnabled ? 'ON (' + (cfg.pageStyle || '404-space') + (cfg.pageFastfetch ? ' + fastfetch' : '') + ')' : 'OFF'}\x1b[0m`);
     console.log('\n  [P] Preview Now      [S] Save & Exit      [Q] Quit Without Saving\n');
 
     const choice = (await ask('Select option: ')).trim().toLowerCase();
@@ -629,6 +634,17 @@ async function runConfigMenu(cfg) {
     } else if (choice === 'b') {
       const v = await pickFromList('Detail Levels', OPTIONS.detail);
       if (v) cfg.detail = v;
+    } else if (choice === 'd') {
+      const toggle = (await ask('Enable Pages mode? (y/n): ')).trim().toLowerCase();
+      if (toggle === 'y' || toggle === 'yes' || toggle === 'on') {
+        cfg.pageEnabled = true;
+        const v = await pickFromList('Page Styles', OPTIONS.page);
+        if (v) cfg.pageStyle = v;
+        const ff = (await ask('Run fastfetch after page finishes loading? (y/n): ')).trim().toLowerCase();
+        cfg.pageFastfetch = (ff === 'y' || ff === 'yes' || ff === 'on');
+      } else if (toggle === 'n' || toggle === 'no' || toggle === 'off') {
+        cfg.pageEnabled = false;
+      }
     } else if (choice === 'c') {
       const ans = await ask('Enter animation speed multiplier (0.5-2.0, default 1.0): ');
       const num = parseFloat(ans);
@@ -654,6 +670,465 @@ const ORANGE_GRADIENT = [229, 222, 221, 220, 215, 214, 209, 208, 202, 166, 160, 
 const LEAF_GRADIENT = [155, 119, 83, 77, 41, 34];
 
 // 60 FPS Synchronized 3D Renderer with Proper Lighting
+function buildTorusGeometry(lowPower = false) {
+  const pts = [];
+  const R = 1.05, r = 0.48;
+  const thetaStep = lowPower ? 0.09 : 0.045;
+  const phiStep = lowPower ? 0.14 : 0.07;
+  for (let theta = 0; theta < Math.PI * 2; theta += thetaStep) {
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    for (let phi = 0; phi < Math.PI * 2; phi += phiStep) {
+      const cosP = Math.cos(phi), sinP = Math.sin(phi);
+      const dist = R + r * cosP;
+      pts.push(dist * cosT, r * sinP, dist * sinT, cosP * cosT, sinP, cosP * sinT, 0);
+    }
+  }
+  return new Float32Array(pts);
+}
+
+function getPageDims() {
+  const cols = Math.min(116, Math.max(84, (process.stdout.columns || 100) - 2));
+  return { cols, innerW: cols - 2, rows: 22 };
+}
+
+function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
+  const { cols, innerW, rows } = getPageDims();
+  const rst = '\x1b[0m';
+  const dimCol = '\x1b[2m';
+  const speed = cfg.animSpeed || 1.0;
+
+  if (cfg.pageStyle === 'text-scramble') {
+    const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
+    const hiCol = `\x1b[38;5;${theme.gradient}m`;
+    const midCol = `\x1b[38;5;${theme.gradient[Math.min(theme.gradient.length - 1, 4)]}m`;
+    const grid = Array.from({ length: rows }, () => Array(innerW).fill(' '));
+    const colorGrid = Array.from({ length: rows }, () => Array(innerW).fill(''));
+
+    const glyphs = '!<>-_\\/[]{}—=+*^?#01@$%&░▒▓';
+    const glitchColors = [
+      '\x1b[38;5;51m',  // electric cyan
+      '\x1b[38;5;201m', // hot magenta
+      '\x1b[38;5;82m',  // neon green
+      '\x1b[38;5;214m', // bright orange
+      '\x1b[38;5;226m', // vivid yellow
+      '\x1b[1;37m'      // crisp white flash
+    ];
+
+    const t = (elapsed * speed) % 7.4;
+    const progress = t < 4.4 ? (t / 4.4) : (t < 6.4 ? 1.0 : Math.max(0, 1 - (t - 6.4) / 1.0));
+    const isScrambling = progress < 0.96;
+
+    const BIG = {
+      'O': [' █████ ', '██   ██', '██   ██', '██   ██', ' █████ '],
+      'r': ['       ', '██ ███ ', '███    ', '██     ', '██     '],
+      'a': ['       ', ' █████ ', '  ▄▄▄██', '██   ██', ' █████▀'],
+      'n': ['       ', '██ ███ ', '██   ██', '██   ██', '██   ██'],
+      'g': ['       ', ' █████ ', '██   ██', ' ██████', ' ▄▄▄▄██'],
+      'e': ['       ', ' █████ ', '███████', '██     ', ' █████ '],
+      'P': ['██████ ', '██   ██', '██████ ', '██     ', '██     '],
+      'i': [' ██    ', '       ', ' ██    ', ' ██    ', ' ██    '],
+      'Z': ['███████', '    ██ ', '  ███  ', ' ██    ', '███████'],
+      'o': ['       ', ' █████ ', '██   ██', '██   ██', ' █████ '],
+      '4': ['  ███  ', ' ████  ', '██ ██  ', '███████', '   ██  ']
+    };
+
+    const renderWordLine = (lineWords, baseWordIdx, topRow) => {
+      const bRows = ['', '', '', '', ''];
+      const wMap = [];
+      lineWords.forEach((word, idx) => {
+        const wIdx = baseWordIdx + idx;
+        if (idx > 0) {
+          for (let r = 0; r < 5; r++) bRows[r] += '   ';
+          wMap.push(-1, -1, -1);
+        }
+        for (const ch of word) {
+          const g = BIG[ch];
+          for (let r = 0; r < 5; r++) bRows[r] += g[r] + ' ';
+          for (let k = 0; k < g.at(0).length + 1; k++) wMap.push(wIdx);
+        }
+      });
+
+      const lineW = bRows.at(0).length;
+      const startX = Math.max(2, Math.floor((innerW - lineW) / 2));
+      const glitchBurst = isScrambling && (Math.sin(elapsed * 29 + baseWordIdx) > 0.72);
+
+      for (let r = 0; r < 5; r++) {
+        const rowShear = glitchBurst ? (((r + Math.floor(elapsed * 40)) % 3) - 1) : 0;
+        for (let i = 0; i < lineW; i++) {
+          const ch = bRows[r][i];
+          const wIdx = wMap[i];
+          if (ch === ' ' || wIdx < 0) continue;
+
+          const wordStart = wIdx * 0.23;
+          const wordEnd = wordStart + 0.23;
+          const wp = Math.max(0, Math.min(1, (progress - wordStart) / (wordEnd - wordStart)));
+          const gx = startX + i + (wp < 1.0 ? rowShear : 0);
+          if (gx < 1 || gx >= innerW - 1) continue;
+
+          if (wp >= 1.0) {
+            const gradRowCol = `\x1b[38;5;${theme.gradient[Math.min(theme.gradient.length - 1, r * 2)]}m`;
+            grid[topRow + r][gx] = ch;
+            colorGrid[topRow + r][gx] = gradRowCol;
+          } else if (wp > 0.04) {
+            const tick = Math.floor(elapsed * 36 + i * 7 + r * 13);
+            grid[topRow + r][gx] = glyphs[tick % glyphs.length];
+            colorGrid[topRow + r][gx] = wp > 0.82 ? '\x1b[1;37m' : glitchColors[tick % glitchColors.length];
+
+            const ghostX = gx + (r % 2 === 0 ? 1 : -1);
+            if (ghostX >= 1 && ghostX < innerW - 1 && grid[topRow + r][ghostX] === ' ') {
+              grid[topRow + r][ghostX] = glyphs[(tick + 5) % glyphs.length];
+              colorGrid[topRow + r][ghostX] = r % 2 === 0 ? '\x1b[38;5;51m' : '\x1b[38;5;201m';
+            }
+          } else {
+            const tick = Math.floor(elapsed * 20 + i * 3 + r * 5);
+            grid[topRow + r][gx] = glyphs[tick % glyphs.length];
+            colorGrid[topRow + r][gx] = tick % 5 === 0 ? glitchColors[(i + r) % 4] : dimCol;
+          }
+        }
+      }
+    };
+
+    // Top & bottom decorative rules
+    const ruleW = Math.min(innerW - 8, 66);
+    const ruleStart = Math.max(2, Math.floor((innerW - ruleW) / 2));
+    for (let i = 0; i < ruleW; i++) {
+      const glitchTick = isScrambling && ((Math.floor(elapsed * 24) + i * 7) % 19 === 0);
+      grid[rows - 5][ruleStart + i] = glitchTick ? glyphs[(i + Math.floor(elapsed * 30)) % glyphs.length] : '═';
+      colorGrid[rows - 5][ruleStart + i] = glitchTick ? glitchColors[i % glitchColors.length] : dimCol;
+      grid[rows - 5][ruleStart + i] = glitchTick ? glyphs[(i * 3 + Math.floor(elapsed * 30)) % glyphs.length] : '═';
+      colorGrid[rows - 5][ruleStart + i] = glitchTick ? glitchColors[(i + 2) % glitchColors.length] : dimCol;
+    }
+
+    // Stack "Orange Pi" (words 0, 1) above "Zero 4" (words 2, 3)
+    renderWordLine(['Orange', 'Pi'], 0, 3);
+    renderWordLine(['Zero', '4'], 2, 9);
+
+    // Ambient horizontal glitch sparks during active scramble
+    if (isScrambling) {
+      for (let g = 0; g < 6; g++) {
+        const gy = 2 + ((Math.floor(elapsed * 19) + g * 5) % (rows - 5));
+        const gx = 3 + ((Math.floor(elapsed * 47) + g * 23) % (innerW - 8));
+        if (grid[gy][gx] === ' ') {
+          grid[gy][gx] = glyphs[(g + Math.floor(elapsed * 35)) % glyphs.length];
+          colorGrid[gy][gx] = glitchColors[(g + Math.floor(elapsed * 12)) % glitchColors.length];
+        }
+      }
+    }
+
+    const words = ['Orange', 'Pi', 'Zero', '4'];
+    const activeWord = progress >= 0.95 ? 'COMPLETE' : words[Math.min(3, Math.floor(progress * 4))].toUpperCase();
+    const statusText = progress >= 0.95
+      ? `[ WELCOME BACK, ${(process.env.USER || 'ROOT').toUpperCase()} — SYSTEM VERIFIED ]`
+      : `[ DECRYPTING TARGET: ${activeWord} ]`;
+    const sStart = Math.max(2, Math.floor((innerW - statusText.length) / 2));
+    for (let i = 0; i < statusText.length && sStart + i < innerW - 2; i++) {
+      grid[rows - 3][sStart + i] = statusText[i];
+      colorGrid[rows - 3][sStart + i] = progress >= 0.95 ? '\x1b[1;32m' : hiCol;
+    }
+
+    const lines = [`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`];
+    for (let r = 0; r < rows; r++) {
+      let rowStr = '';
+      for (let c = 0; c < innerW; c++) rowStr += colorGrid[r][c] ? `${colorGrid[r][c]}${grid[r][c]}${rst}` : grid[r][c];
+      lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
+    }
+    const footer = ' [PAGE: TEXT-SCRAMBLE] Press any key to continue ';
+    const fPad = Math.max(0, innerW - footer.length);
+    const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
+    lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
+    return lines;
+  }
+
+  if (cfg.pageStyle === 'progress-loader') {
+    const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
+    const hiCol = `\x1b[38;5;${theme.gradient}m`;
+    const midCol = `\x1b[38;5;${theme.gradient[Math.min(theme.gradient.length - 1, 3)]}m`;
+    const grid = Array.from({ length: rows }, () => Array(innerW).fill(' '));
+    const colorGrid = Array.from({ length: rows }, () => Array(innerW).fill(''));
+
+    const writeCenter = (rIdx, text, col = '') => {
+      const start = Math.max(1, Math.floor((innerW - text.length) / 2));
+      for (let i = 0; i < text.length && start + i < innerW - 1; i++) {
+        grid[rIdx][start + i] = text[i];
+        colorGrid[rIdx][start + i] = col;
+      }
+    };
+
+    // Animated Braille & Orbital Spinners
+    const brailleFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    const orbitFrames = ['◐', '◓', '◑', '◒'];
+    const stepIdx = Math.floor(elapsed * 12 * speed);
+    const bSpin = brailleFrames[stepIdx % brailleFrames.length];
+    const oSpin = orbitFrames[Math.floor(elapsed * 6 * speed) % orbitFrames.length];
+
+    // 3-ring animated ASCII loader emblem
+    const ringPhase = Math.floor(elapsed * 8 * speed) % 4;
+    const emblem = [
+      `      . - ~ ~ ~ - .      `,
+      `   . '   ${ringPhase === 0 ? '●' : '○'}   ${ringPhase === 1 ? '●' : '○'}   ' .   `,
+      `  /   ${ringPhase === 3 ? '●' : '○'}    ${oSpin}    ${ringPhase === 2 ? '●' : '○'}   \  `,
+      `   ' .   ${ringPhase === 2 ? '●' : '○'}   ${ringPhase === 3 ? '●' : '○'}   . '   `,
+      `      ' - _ _ _ - '      `
+    ];
+    for (let r = 0; r < emblem.length; r++) {
+      writeCenter(3 + r, emblem[r], r === 2 ? hiCol : midCol);
+    }
+
+    // Smooth looping progress bar (0% -> 100%)
+    const cycle = (elapsed * 0.28 * speed) % 1.15;
+    const pct = Math.min(100, Math.floor((cycle / 1.0) * 100));
+    const barW = Math.min(44, innerW - 16);
+    const filled = Math.round((pct / 100) * barW);
+    const barRow = 10;
+    const barStart = Math.floor((innerW - (barW + 8)) / 2);
+
+    grid[barRow][barStart] = '[';
+    colorGrid[barRow][barStart] = bCol;
+    for (let i = 0; i < barW; i++) {
+      const gx = barStart + 1 + i;
+      if (i < filled) {
+        const wave = (i + stepIdx) % 6 === 0;
+        grid[barRow][gx] = wave ? '▓' : '█';
+        colorGrid[barRow][gx] = wave ? '\x1b[1;37m' : hiCol;
+      } else {
+        grid[barRow][gx] = '░';
+        colorGrid[barRow][gx] = dimCol;
+      }
+    }
+    const pctLabel = `] ${String(pct).padStart(3, ' ')}%`;
+    for (let i = 0; i < pctLabel.length; i++) {
+      grid[barRow][barStart + 1 + barW + i] = pctLabel[i];
+      colorGrid[barRow][barStart + 1 + barW + i] = i === 0 ? bCol : '\x1b[1;37m';
+    }
+
+    // Status message & checklist rows
+    const stages = [
+      'Initializing SBC hardware sensors...',
+      'Mounting filesystems & network interfaces...',
+      'Synchronizing terminal telemetry...',
+      'Environment ready — welcome back!'
+    ];
+    const stageMsg = pct >= 100 ? stages : stages[Math.min(2, Math.floor((pct / 100) * 3))];
+    writeCenter(12, `${bSpin}  ${stageMsg}`, '\x1b[1;37m');
+
+    const checks = [
+      { label: 'CPU & Thermal Monitors', done: pct >= 30 },
+      { label: 'Network & SSH Session', done: pct >= 65 },
+      { label: 'Interactive Shell Profile', done: pct >= 95 }
+    ];
+    for (let i = 0; i < checks.length; i++) {
+      const mark = checks[i].done ? '[✓]' : `[${brailleFrames[(stepIdx + i * 2) % brailleFrames.length]}]`;
+      const col = checks[i].done ? '\x1b[1;32m' : dimCol;
+      writeCenter(14 + i, `${mark} ${checks[i].label}`, col);
+    }
+
+    writeCenter(rows - 2, 'Loading your workspace...', dimCol);
+
+    const lines = [];
+    lines.push(`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`);
+    for (let r = 0; r < rows; r++) {
+      let rowStr = '';
+      for (let c = 0; c < innerW; c++) {
+        rowStr += colorGrid[r][c] ? `${colorGrid[r][c]}${grid[r][c]}${rst}` : grid[r][c];
+      }
+      lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
+    }
+    const footer = ' [PAGE: PROGRESS-LOADER] Press any key to continue ';
+    const fPad = Math.max(0, innerW - footer.length);
+    const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
+    lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
+    return lines;
+  }
+
+  if (cfg.pageStyle === 'christmas') {
+    const bCol = '\x1b[38;5;34m';
+    const grid = Array.from({ length: rows }, () => Array(innerW).fill(' '));
+    const colorGrid = Array.from({ length: rows }, () => Array(innerW).fill(''));
+
+    // Drifting snow across the sky
+    for (let s = 0; s < 48; s++) {
+      const fall = Math.floor(elapsed * (1.8 + (s % 3) * 0.7) * speed + s * 5);
+      const sy = fall % (rows - 3);
+      const sway = Math.round(Math.sin(elapsed * 1.5 * speed + s) * 1.5);
+      const sx = ((s * 31 + sway) % (innerW - 2) + (innerW - 2)) % (innerW - 2) + 1;
+      grid[sy][sx] = s % 4 === 0 ? '*' : '·';
+      colorGrid[sy][sx] = s % 3 === 0 ? '\x1b[1;37m' : '\x1b[38;5;250m';
+    }
+
+    // Snow ground
+    for (let x = 1; x < innerW - 1; x++) {
+      grid[rows - 3][x] = x % 3 === 0 ? '~' : '_';
+      colorGrid[rows - 3][x] = '\x1b[1;37m';
+    }
+
+    // Christmas Tree (tiered evergreen + blinking ornaments + gold star)
+    const tree = [
+      '           ★           ',
+      '          /|\          ',
+      '         /*|o\         ',
+      '        /o*|*+\        ',
+      '       /*+o|o*+\       ',
+      '      /o*+*|*o*+\      ',
+      '     /*+o*+|+*o*+\     ',
+      '    /o*+o*+|+*o*+o\    ',
+      '   /*+o*+o*|*o*+o*+\   ',
+      '  /o*+o*+o*|*o*+o*+o\  ',
+      ' /_________|_________\ ',
+      '          |||          ',
+      '          |||          '
+    ];
+    const ornColors = ['\x1b[1;31m', '\x1b[1;33m', '\x1b[1;36m', '\x1b[1;35m', '\x1b[38;5;208m'];
+    const greens = ['\x1b[38;5;34m', '\x1b[38;5;40m', '\x1b[38;5;28m'];
+    const tx0 = Math.floor((innerW - tree.length) / 2);
+    const ty0 = 3;
+
+    for (let r = 0; r < tree.length; r++) {
+      for (let c = 0; c < tree[r].length; c++) {
+        const ch = tree[r][c];
+        const gx = tx0 + c, gy = ty0 + r;
+        if (ch === ' ' || gx < 1 || gx >= innerW - 1 || gy >= rows - 3) continue;
+        if (r === 0 && ch === '★') {
+          const pulse = Math.sin(elapsed * 5 * speed) > 0;
+          grid[gy][gx] = pulse ? '★' : '✦';
+          colorGrid[gy][gx] = pulse ? '\x1b[1;33m' : '\x1b[38;5;226m';
+        } else if (r >= 11) {
+          grid[gy][gx] = ch;
+          colorGrid[gy][gx] = '\x1b[38;5;130m';
+        } else if (ch === 'o' || ch === '+' || ch === '*') {
+          const phase = Math.floor(elapsed * 3.5 * speed + r * 3 + c * 5);
+          const isLit = phase % 3 !== 0;
+          grid[gy][gx] = ch === 'o' ? '●' : (ch === '+' ? '◆' : (isLit ? '✦' : '·'));
+          colorGrid[gy][gx] = isLit ? ornColors[(r + c + phase) % ornColors.length] : greens[(r + c) % greens.length];
+        } else {
+          grid[gy][gx] = ch;
+          colorGrid[gy][gx] = greens[(r + c) % greens.length];
+        }
+      }
+    }
+
+    // Colorful wrapped presents under the tree
+    const gifts = [
+      { x: tx0 - 6, w: 5, col: '\x1b[1;31m', rib: '\x1b[1;33m' },
+      { x: tx0 + tree.length + 1, w: 6, col: '\x1b[1;34m', rib: '\x1b[1;37m' },
+      { x: tx0 + tree.length + 8, w: 4, col: '\x1b[1;35m', rib: '\x1b[1;33m' }
+    ];
+    for (const g of gifts) {
+      if (g.x < 2 || g.x + g.w >= innerW - 2) continue;
+      for (let dx = 0; dx < g.w; dx++) {
+        const isRib = dx === Math.floor(g.w / 2);
+        grid[rows - 5][g.x + dx] = isRib ? '+' : '_';
+        colorGrid[rows - 5][g.x + dx] = g.rib;
+        grid[rows - 4][g.x + dx] = isRib ? '|' : '#';
+        colorGrid[rows - 4][g.x + dx] = isRib ? g.rib : g.col;
+      }
+    }
+
+    const msg = 'Merry Christmas & Happy Holidays!';
+    const mStart = Math.max(1, Math.floor((innerW - msg.length) / 2));
+    for (let i = 0; i < msg.length && mStart + i < innerW - 1; i++) {
+      grid[rows - 2][mStart + i] = msg[i];
+      colorGrid[rows - 2][mStart + i] = i % 2 === 0 ? '\x1b[1;31m' : '\x1b[1;32m';
+    }
+
+    const lines = [];
+    lines.push(`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`);
+    for (let r = 0; r < rows; r++) {
+      let rowStr = '';
+      for (let c = 0; c < innerW; c++) {
+        rowStr += colorGrid[r][c] ? `${colorGrid[r][c]}${grid[r][c]}${rst}` : grid[r][c];
+      }
+      lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
+    }
+    const footer = ' [PAGE: CHRISTMAS] Press any key to continue ';
+    const fPad = Math.max(0, innerW - footer.length);
+    const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
+    lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
+    return lines;
+  }
+
+  const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
+  const hiCol = `\x1b[38;5;${theme.gradient}m`;
+  // Build starfield + drifting astronaut/404 emblem
+  const grid = Array.from({ length: rows }, () => Array(innerW).fill(' '));
+  const colorGrid = Array.from({ length: rows }, () => Array(innerW).fill(''));
+
+  // Twinkling background stars
+  for (let s = 0; s < 38; s++) {
+    const sx = (s * 29 + Math.floor(elapsed * (s % 3 === 0 ? 3 : 1) * speed)) % innerW;
+    const sy = (s * 13) % (rows - 5);
+    const twinkle = Math.sin(elapsed * 4 + s) > 0.2 ? '*' : '.';
+    grid[sy][sx] = twinkle;
+    colorGrid[sy][sx] = dimCol;
+  }
+
+  // Drifting mini-planet / black hole on left
+  const planet = [
+    '   .---.   ',
+    '  /     \  ',
+    '-(  (o)  )-',
+    '  \     /  ',
+    "   '---'   "
+  ];
+  const py0 = 3 + Math.round(Math.cos(elapsed * 1.2 * speed));
+  for (let r = 0; r < planet.length; r++) {
+    for (let c = 0; c < planet[r].length; c++) {
+      const ch = planet[r][c];
+      if (ch !== ' ' && py0 + r >= 0 && py0 + r < rows) {
+        grid[py0 + r][6 + c] = ch;
+        colorGrid[py0 + r][6 + c] = `\x1b[38;5;${theme.gradient[3]}m`;
+      }
+    }
+  }
+
+  // Floating 404 + drifting astronaut sprite
+  const art = [
+    '   _  _    ___  _  _        .-.   ',
+    '  | || |  / _ \| || |      (o.o)  ',
+    '  | || |_| | | | || |_   --|=|=|--',
+    '  |__   _| | | |__   _|    |___|  ',
+    '     |_|  \___/   |_|      /   \  '
+  ];
+  const floatX = Math.floor((innerW - art[0].length) / 2) + Math.round(Math.sin(elapsed * 1.6 * speed) * 6);
+  const floatY = 4 + Math.round(Math.sin(elapsed * 2.4 * speed) * 1.5);
+  for (let r = 0; r < art.length; r++) {
+    for (let c = 0; c < art[r].length; c++) {
+      const ch = art[r][c];
+      const gx = floatX + c, gy = floatY + r;
+      if (ch !== ' ' && gx >= 1 && gx < innerW - 1 && gy >= 1 && gy < rows - 5) {
+        grid[gy][gx] = ch;
+        colorGrid[gy][gx] = hiCol;
+      }
+    }
+  }
+
+  const centerText = (rowIdx, text, col = '') => {
+    const start = Math.max(1, Math.floor((innerW - text.length) / 2));
+    for (let i = 0; i < text.length && start + i < innerW - 1; i++) {
+      grid[rowIdx][start + i] = text[i];
+      colorGrid[rowIdx][start + i] = col;
+    }
+  };
+
+  centerText(rows - 4, '404 · Page not found', hiCol);
+  centerText(rows - 3, 'This page drifted off into space.', '\x1b[1;37m');
+  centerText(rows - 1, '[ Take me home — press any key ]', dimCol);
+
+  const lines = [];
+  lines.push(`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`);
+  for (let r = 0; r < rows; r++) {
+    let rowStr = '';
+    for (let c = 0; c < innerW; c++) {
+      rowStr += colorGrid[r][c] ? `${colorGrid[r][c]}${grid[r][c]}${rst}` : grid[r][c];
+    }
+    lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
+  }
+  const footer = ` [PAGE: ${(cfg.pageStyle || '404-space').toUpperCase()}] Press any key to continue `;
+  const fPad = Math.max(0, innerW - footer.length);
+  const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
+  lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
+  return lines;
+}
+
 async function runRenderer(cfg) {
   // Optimize for hardware automatically
   const lowPower = isLowPowerDevice();
@@ -668,7 +1143,10 @@ async function runRenderer(cfg) {
   // Use superior citrus geometry for orange-themed displays
   let renderGeometry = null;
   let isCitrus = false;
-  if (activeLogo === 'orangepi' || activeThemeName === 'orangepi') {
+  if (activeLogo === 'torus') {
+    renderGeometry = buildTorusGeometry(lowPower);
+    isCitrus = true;
+  } else if (activeLogo === 'orangepi') {
     renderGeometry = buildCitrusGeometry(lowPower);
     isCitrus = true;
   }
@@ -721,7 +1199,7 @@ async function runRenderer(cfg) {
     console.log(`\x1b[38;5;${accentColor}m\x1b[1m${msg}\x1b[0m`);
     if (cfg.showTip) {
       const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
-      console.log(`\x1b[2m💡 ${tip}\x1b[0m`);
+      console.log(`\x1b[2m[>] ${tip}\x1b[0m`);
     }
     process.exit(0);
   };
@@ -742,6 +1220,159 @@ async function runRenderer(cfg) {
   const renderFrame = () => {
     if (!running) return;
     const elapsed = (Date.now() - startTime) / 1000;
+    if (cfg.pageEnabled) {
+      const sp = cfg.animSpeed || 1.0;
+      const doneAt = cfg.pageStyle === 'text-scramble' ? (4.8 / sp)
+                   : cfg.pageStyle === 'progress-loader' ? (3.8 / sp)
+                   : (3.5 / sp);
+
+      const { cols, innerW, rows } = getPageDims();
+      const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
+      const dimCol = '\x1b[2m';
+      const rst = '\x1b[0m';
+
+      let linesToDraw = null;
+
+      if (cfg.pageFastfetch && elapsed >= doneAt) {
+        if (!renderFrame.ffGrid) {
+          let rawFf = '';
+          try {
+            rawFf = execSync('fastfetch --pipe false --logo-padding-left 1', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+          } catch {
+            try {
+              rawFf = execSync('fastfetch', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            } catch {
+              rawFf = '\x1b[1;33mfastfetch not installed or not found in PATH.\x1b[0m';
+            }
+          }
+
+          const vGrid = Array.from({ length: rows }, () => Array(innerW - 2).fill(' '));
+          const vCol = Array.from({ length: rows }, () => Array(innerW - 2).fill(''));
+          let r = 0, c = 0, curAnsi = '';
+
+          const tokens = rawFf.split(/(\x1b\[[0-9;?]*[A-Za-z])/);
+          for (const tok of tokens) {
+            if (!tok) continue;
+            if (tok.startsWith('\x1b[')) {
+              const m = tok.match(/^\x1b\[([0-9;?]*)([A-Za-z])$/);
+              if (!m) continue;
+              const pStr = m.at(1) || '';
+              const cmd = m.at(2);
+              const nums = pStr.split(';').map(n => parseInt(n, 10) || 0);
+              const n0 = nums.at(0) || 0;
+              const n1 = nums.at(1) || 0;
+              if (cmd === 'm') {
+                curAnsi = (pStr === '' || pStr === '0') ? '' : (curAnsi + tok);
+              } else if (cmd === 'A') {
+                r = Math.max(0, r - (n0 || 1));
+              } else if (cmd === 'B') {
+                r = Math.min(rows - 1, r + (n0 || 1));
+              } else if (cmd === 'C') {
+                c = Math.min(innerW - 3, c + (n0 || 1));
+              } else if (cmd === 'D') {
+                c = Math.max(0, c - (n0 || 1));
+              } else if (cmd === 'G') {
+                c = Math.max(0, Math.min(innerW - 3, (n0 || 1) - 1));
+              } else if (cmd === 'H' || cmd === 'f') {
+                r = Math.max(0, Math.min(rows - 1, (n0 || 1) - 1));
+                c = Math.max(0, Math.min(innerW - 3, (n1 || 1) - 1));
+              }
+            } else {
+              for (const ch of tok) {
+                if (ch === '\r') {
+                  c = 0;
+                } else if (ch === '\n') {
+                  r++;
+                  c = 0;
+                } else if (ch >= ' ') {
+                  if (r >= 0 && r < rows && c >= 0 && c < innerW - 2) {
+                    vGrid[r][c] = ch;
+                    vCol[r][c] = curAnsi;
+                  }
+                  c++;
+                }
+              }
+            }
+          }
+
+          // Center vertically if fastfetch used fewer than 24 lines
+          const usedRows = vGrid.reduce((acc, rowArr, idx) => rowArr.some(ch => ch !== ' ') ? idx + 1 : acc, 0);
+          const topPad = Math.max(0, Math.floor((rows - usedRows) / 2));
+          const centeredGrid = Array.from({ length: rows }, () => Array(innerW - 2).fill(' '));
+          const centeredCol = Array.from({ length: rows }, () => Array(innerW - 2).fill(''));
+          for (let ri = 0; ri < usedRows && ri + topPad < rows; ri++) {
+            centeredGrid[ri + topPad] = vGrid[ri];
+            centeredCol[ri + topPad] = vCol[ri];
+          }
+
+          const buildBox = (gArr, cArr, footLabel) => {
+            const outLines = [`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`];
+            for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
+              let lineStr = '';
+              let lastAnsi = '';
+              for (let colIdx = 0; colIdx < innerW - 2; colIdx++) {
+                const a = cArr[rowIdx][colIdx];
+                if (a !== lastAnsi) {
+                  lineStr += rst + a;
+                  lastAnsi = a;
+                }
+                lineStr += gArr[rowIdx][colIdx];
+              }
+              outLines.push(`${bCol}${box.v}${rst} ${lineStr}${rst} ${bCol}${box.v}${rst}`);
+            }
+            const fPad = Math.max(0, innerW - footLabel.length);
+            const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
+            outLines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footLabel}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
+            return outLines;
+          };
+
+          renderFrame.ffGrid = centeredGrid;
+          renderFrame.ffCol = centeredCol;
+          renderFrame.ffFull = buildBox(centeredGrid, centeredCol, ' [FASTFETCH] Press any key to continue ');
+          renderFrame.buildBox = buildBox;
+        }
+
+        const transDur = 0.85;
+        const prog = Math.min(1, (elapsed - doneAt) / transDur);
+
+        if (prog >= 1) {
+          linesToDraw = renderFrame.ffFull;
+        } else {
+          // Smooth wave cross-dissolve into fastfetch without cutting off borders
+          const dGrid = Array.from({ length: rows }, () => Array(innerW - 2).fill(' '));
+          const dCol = Array.from({ length: rows }, () => Array(innerW - 2).fill(''));
+          const fadeChars = ['·', '░', '▒'];
+          for (let ri = 0; ri < rows; ri++) {
+            for (let ci = 0; ci < innerW - 2; ci++) {
+              const cellDelay = (ri / rows) * 0.55 + (ci / (innerW - 2)) * 0.25;
+              const cellProg = Math.max(0, Math.min(1, (prog - cellDelay) / 0.25));
+              if (cellProg >= 1) {
+                dGrid[ri][ci] = renderFrame.ffGrid[ri][ci];
+                dCol[ri][ci] = renderFrame.ffCol[ri][ci];
+              } else if (cellProg > 0.15 && renderFrame.ffGrid[ri][ci] !== ' ') {
+                dGrid[ri][ci] = fadeChars[Math.floor(cellProg * fadeChars.length)];
+                dCol[ri][ci] = dimCol;
+              }
+            }
+          }
+          linesToDraw = renderFrame.buildBox(dGrid, dCol, ' [LOADING SYSTEM INFO...] ');
+        }
+      } else {
+        linesToDraw = renderPageFrame(cfg, elapsed, frameCount, box, theme);
+      }
+
+      let out = '\x1b[?2026h';
+      for (let r = 0; r < linesToDraw.length; r++) {
+        if (prevFrame[r] !== linesToDraw[r]) {
+          out += `\x1b[${r + 1};1H${linesToDraw[r]}`;
+          prevFrame[r] = linesToDraw[r];
+        }
+      }
+      out += '\x1b[?2026l';
+      process.stdout.write(out);
+      frameCount++;
+      return;
+    }
     if (cfg.duration > 0 && elapsed >= cfg.duration) {
       cleanup();
       return;
@@ -778,8 +1409,50 @@ async function runRenderer(cfg) {
 
     const zBuf = new Float32Array(W * subH).fill(-999);
     const rawColor = new Int16Array(W * subH).fill(-1);
+    const lumBuf = new Float32Array(W * subH).fill(-1);
 
-    if (isCitrus && renderGeometry) {
+    if (activeLogo === 'torus') {
+      const A = cfg.anim === 'static' ? 0.8 : elapsed * 1.4 * speedMult;
+      const B = cfg.anim === 'static' ? 0.5 : elapsed * 0.75 * speedMult;
+      const cosA = Math.cos(A), sinA = Math.sin(A);
+      const cosB = Math.cos(B), sinB = Math.sin(B);
+      const R1 = 1.0, R2 = 2.05, K2 = 5.2;
+      const scaleX = W * 0.88 * scale;
+      const scaleY = (cfg.look === 'blocks' ? subH * 0.88 : subH * 0.44) * scale;
+      const halfW = W >> 1;
+      const halfH = ((subH >> 1) + offsetY * 3) | 0;
+      const tStep = lowPower ? 0.09 : 0.045;
+      const pStep = lowPower ? 0.04 : 0.02;
+
+      for (let theta = 0; theta < 6.2832; theta += tStep) {
+        const costheta = Math.cos(theta), sintheta = Math.sin(theta);
+        for (let phi = 0; phi < 6.2832; phi += pStep) {
+          const cosphi = Math.cos(phi), sinphi = Math.sin(phi);
+          const circlex = R2 + R1 * costheta;
+          const circley = R1 * sinphi;
+
+          const x = circlex * (cosB * cosphi + sinA * sinB * sinphi) - circley * cosA * sinB;
+          const y = circlex * (sinB * cosphi - sinA * cosB * sinphi) + circley * cosA * cosB;
+          const z = K2 + cosA * circlex * sinphi + circley * sinA;
+          const ooz = 1 / z;
+
+          const xp = (halfW + scaleX * ooz * x) | 0;
+          const yp = (halfH - scaleY * ooz * y) | 0;
+
+          if (xp >= 0 && xp < W && yp >= 0 && yp < subH) {
+            const idx = yp * W + xp;
+            if (ooz > zBuf[idx]) {
+              zBuf[idx] = ooz;
+              const L = cosphi * costheta * sinB - cosA * costheta * sinphi - sinA * sintheta + cosB * (cosA * sintheta - costheta * sinA * sinphi);
+              const lum = Math.max(0.05, Math.min(0.99, (L + 0.55) / 1.85));
+              lumBuf[idx] = lum;
+              const gradIdx = Math.min(theme.gradient.length - 1, Math.floor((1 - lum) * theme.gradient.length));
+              rawColor[idx] = theme.gradient[gradIdx];
+            }
+          }
+        }
+      }
+    } else if (isCitrus && renderGeometry) {
       // Superior citrus rendering with proper lighting
       const PTS = renderGeometry;
       const scale50 = 50.0 * scale;
@@ -819,7 +1492,7 @@ async function runRenderer(cfg) {
             } else {
               const gradPos = (yp / (subH - 1)) * 0.65 + (1 - light) * 0.35;
               const idx12 = Math.min(Math.max(0, (gradPos * 12) | 0), 11);
-              rawColor[idx] = ORANGE_GRADIENT[idx12];
+              rawColor[idx] = (activeLogo === 'orangepi' ? ORANGE_GRADIENT : theme.gradient)[idx12];
             }
           }
         }
@@ -926,16 +1599,24 @@ async function runRenderer(cfg) {
           if (rawColor[idx] < 0) {
             artRow += ' ';
           } else {
-            const normZ = Math.max(0, Math.min(0.99, (zBuf[idx] + 8) / 16));
+            const normZ = (typeof lumBuf !== 'undefined' && lumBuf[idx] >= 0)
+              ? lumBuf[idx]
+              : Math.max(0, Math.min(0.99, (zBuf[idx] + 8) / 16));
             const gradIdx = Math.floor(normZ * (theme.gradient.length - 1));
-            const colCode = theme.gradient[gradIdx];
+            const colCode = rawColor[idx] >= 0 ? rawColor[idx] : theme.gradient[gradIdx];
+            const HALFTONE_RAMP = ['·', '•', '●', '◉', '█'];
+            const DOTS_RAMP = ['·', ':', '∘', '○', '◎', '●'];
             let ch = '#';
-            if (cfg.look === 'ascii') {
-              ch = ASCII_RAMP[Math.floor(normZ * ASCII_RAMP.length)];
+            if (cfg.look === 'ascii' || cfg.look === 'original') {
+              ch = ASCII_RAMP[Math.min(ASCII_RAMP.length - 1, Math.floor(normZ * ASCII_RAMP.length))];
             } else if (cfg.look === 'binary') {
               ch = ((row + col + Math.floor(frameCount / 4)) % 2 === 0) ? '1' : '0';
             } else if (cfg.look === 'braille') {
-              ch = BRAILLE_RAMP[Math.floor(normZ * BRAILLE_RAMP.length)];
+              ch = BRAILLE_RAMP[Math.min(BRAILLE_RAMP.length - 1, Math.floor(normZ * BRAILLE_RAMP.length))];
+            } else if (cfg.look === 'halftone') {
+              ch = HALFTONE_RAMP[Math.min(HALFTONE_RAMP.length - 1, Math.floor(normZ * HALFTONE_RAMP.length))];
+            } else if (cfg.look === 'dots') {
+              ch = DOTS_RAMP[Math.min(DOTS_RAMP.length - 1, Math.floor(normZ * DOTS_RAMP.length))];
             }
             artRow += `\x1b[38;5;${colCode}m${ch}${rst}`;
           }
@@ -1043,6 +1724,12 @@ async function main() {
     else if (a === '--set-speed' && next) { cfg.animSpeed = Math.max(0.5, Math.min(2.0, parseFloat(next) || 1.0)); previewCfg.animSpeed = cfg.animSpeed; shouldSave = true; i++; }
     else if (a === '--set-showTip') { cfg.showTip = true; previewCfg.showTip = true; shouldSave = true; }
     else if (a === '--no-tip') { cfg.showTip = false; previewCfg.showTip = false; shouldSave = true; }
+    else if (a === '--page' && next) { previewCfg.pageEnabled = true; previewCfg.pageStyle = next; i++; }
+    else if (a === '--set-page' && next) { cfg.pageEnabled = true; cfg.pageStyle = next; previewCfg.pageEnabled = true; previewCfg.pageStyle = next; shouldSave = true; i++; }
+    else if (a === '--no-page') { cfg.pageEnabled = false; previewCfg.pageEnabled = false; shouldSave = true; }
+    else if (a === '--page-fastfetch') { previewCfg.pageFastfetch = true; }
+    else if (a === '--set-page-fastfetch') { cfg.pageFastfetch = true; previewCfg.pageFastfetch = true; shouldSave = true; }
+    else if (a === '--no-page-fastfetch') { cfg.pageFastfetch = false; previewCfg.pageFastfetch = false; shouldSave = true; }
     else if (a === '--motd-info') {
       const status = detectMotdStatus();
       console.log('🎯 MOTD Configuration Status:');
