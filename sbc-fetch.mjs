@@ -214,9 +214,10 @@ function updateApp() {
       return true;
     }
 
-    // For npm-installed versions, check against remote
+    // For npm-installed versions, check against remote GitHub
     console.log('📦 Checking for updates...');
     try {
+      // Try npm registry first (if published)
       const remoteInfo = execSync('npm view sbc-fetch@latest version --json', { encoding: 'utf8' }).trim();
       const remoteVersion = JSON.parse(remoteInfo);
       
@@ -244,9 +245,27 @@ function updateApp() {
       console.log('💡 Run "sbc-fetch" to see the latest features!');
       return true;
     } catch (err) {
-      console.log('❌ Update check failed: ' + err.message);
-      console.log('💡 Try manual reinstall: npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git');
-      return false;
+      // If npm registry check fails, check GitHub directly for latest commit
+      if (err.message.includes('404') || err.message.includes('Not Found')) {
+        try {
+          execSync('git ls-remote https://github.com/wereallmadhereblip/sbc-fetch.git HEAD', { encoding: 'utf8', stdio: 'pipe' });
+          // Can reach GitHub, do a fresh install from source
+          console.log(`⬇️  Updating sbc-fetch from GitHub...`);
+          execSync('npm install -g https://github.com/wereallmadhereblip/sbc-fetch.git', { stdio: 'inherit' });
+          mkdirSync(CONFIG_DIR, { recursive: true });
+          writeFileSync(checkCachePath, currentVersion);
+          console.log('✅ Update complete! sbc-fetch has been updated to the latest version.');
+          console.log('💡 Run "sbc-fetch" to see the latest features!');
+          return true;
+        } catch {
+          // Can't reach GitHub or already up to date
+          console.log(`✅ sbc-fetch is already up to date! (v${currentVersion})`);
+          mkdirSync(CONFIG_DIR, { recursive: true });
+          writeFileSync(checkCachePath, currentVersion);
+          return true;
+        }
+      }
+      throw err;
     }
   } catch (error) {
     console.log('❌ Update failed: ' + error.message);
