@@ -1146,17 +1146,15 @@ async function runRenderer(cfg) {
   let renderGeometry = null;
   let isCitrus = false;
   if (activeLogo === 'torus') {
-    renderGeometry = buildTorusGeometry(lowPower);
     isCitrus = true;
   } else if (activeLogo === 'orangepi') {
-    renderGeometry = buildCitrusGeometry(lowPower);
+    renderGeometry = buildCitrusGeometry(false);
     isCitrus = true;
   }
 
   const voxels = isCitrus ? null : buildVoxels(activeLogo, lowPower);
   const sysLines = getSystemInfo();
 
-  // Detail level affects resolution and character set
   const detailLevelMap = {
     low: { resolution: 0.7, chars: '.,-~:;=!*#$@' },
     medium: { resolution: 0.85, chars: '░▒▓█' },
@@ -1164,21 +1162,12 @@ async function runRenderer(cfg) {
   };
   const detailLevel = detailLevelMap[cfg.detail] || detailLevelMap.high;
 
-  // Maximize terminal usage: 3D logo gets 50% width, info gets 50%
-  const W = Math.ceil(50 * detailLevel.resolution);  // Increased from 34 to 50
-  const H = Math.ceil(24 * detailLevel.resolution);  // Increased from 18 to 24
+  const W = Math.ceil(50 * detailLevel.resolution);
+  const H = 22;
   const subH = cfg.look === 'blocks' ? H * 2 : H;
-  const infoWidth = 60;  // Increased from 48 to 60
-  const totalWidth = W + infoWidth + 6;
-
-  const ASCII_RAMP = '.,-~:;=!*#$@';
-  const DETAIL_RAMP = detailLevel.chars;
-  const BRAILLE_RAMP = ['⠂', '⠒', '⠖', '⠶', '⠷', '⠿', '⡿', '⣿'];
-  const BLOCK_CHARS_HIGH = ['░', '▒', '▓', '█'];
-  const BLOCK_CHARS_MED = ['░', '▓', '█'];
-  const BLOCK_CHARS_LOW = ['░', '█'];
-
-  let prevFrame = [];
+  const infoWidth = 48;
+  const totalWidth = W + infoWidth + 5;
+  const prevFrame = [];
   let frameCount = 0;
   const startTime = Date.now();
   let running = true;
@@ -1194,7 +1183,6 @@ async function runRenderer(cfg) {
       process.stdin.setRawMode(false);
       process.stdin.pause();
     }
-
     const user = process.env.USER || userInfo().username || 'user';
     const msg = cfg.greeting.replace(/\$USER/g, user);
     const accentColor = theme.gradient[theme.gradient.length - 1];
@@ -1210,7 +1198,7 @@ async function runRenderer(cfg) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on('data', (key) => {
-      if (key[0] === 3) process.exit(0);
+      if (key === 3) process.exit(0);
       cleanup();
     });
   }
@@ -1297,7 +1285,6 @@ async function runRenderer(cfg) {
             }
           }
 
-          // Center vertically if fastfetch used fewer than 24 lines
           const usedRows = vGrid.reduce((acc, rowArr, idx) => rowArr.some(ch => ch !== ' ') ? idx + 1 : acc, 0);
           const topPad = Math.max(0, Math.floor((rows - usedRows) / 2));
           const centeredGrid = Array.from({ length: rows }, () => Array(innerW - 2).fill(' '));
@@ -1340,7 +1327,6 @@ async function runRenderer(cfg) {
         if (prog >= 1) {
           linesToDraw = renderFrame.ffFull;
         } else {
-          // Smooth wave cross-dissolve into fastfetch without cutting off borders
           const dGrid = Array.from({ length: rows }, () => Array(innerW - 2).fill(' '));
           const dCol = Array.from({ length: rows }, () => Array(innerW - 2).fill(''));
           const fadeChars = ['·', '░', '▒'];
@@ -1375,18 +1361,14 @@ async function runRenderer(cfg) {
       frameCount++;
       return;
     }
-    if (cfg.duration > 0 && elapsed >= cfg.duration) {
-      cleanup();
-      return;
-    }
-
-    let rotY = 0, rotX = 0.25, rotZ = 0, offsetY = 0, scale = 1.0;
     const speedMult = cfg.animSpeed || 1.0;
-    
+    let rotY = 0, rotX = 0, rotZ = 0, offsetY = 0, scale = 1.0;
+
     if (cfg.anim === 'rotate') {
-      rotY = elapsed * 1.8 * speedMult;
+      rotY = elapsed * 1.1 * speedMult;
+      rotX = Math.sin(elapsed * 0.7 * speedMult) * 0.15;
     } else if (cfg.anim === 'pendulum') {
-      rotY = Math.sin(elapsed * 2.2 * speedMult) * 0.68;
+      rotY = Math.sin(elapsed * 1.4 * speedMult) * 0.65;
     } else if (cfg.anim === 'bounce') {
       rotY = 0;
       offsetY = Math.abs(Math.sin(elapsed * 4.0 * speedMult)) * -2.2 + 1.0;
@@ -1394,12 +1376,12 @@ async function runRenderer(cfg) {
       rotY = elapsed * 1.1 * speedMult;
       offsetY = Math.abs(Math.sin(elapsed * 4.0 * speedMult)) * -2.2 + 1.0;
     } else if (cfg.anim === 'pulse') {
-      rotY = elapsed * 1.0 * speedMult;
-      scale = 1.0 + Math.sin(elapsed * 3.5 * speedMult) * 0.16;
+      rotY = Math.sin(elapsed * 0.8 * speedMult) * 0.3;
+      scale = 0.88 + Math.sin(elapsed * 3.0 * speedMult) * 0.14;
     } else if (cfg.anim === 'tumble') {
-      rotY = elapsed * 1.5 * speedMult;
-      rotX = elapsed * 1.1 * speedMult;
-      rotZ = elapsed * 0.7 * speedMult;
+      rotY = elapsed * 1.0 * speedMult;
+      rotX = elapsed * 0.65 * speedMult;
+      rotZ = Math.sin(elapsed * 0.5 * speedMult) * 0.35;
     } else if (cfg.anim === 'wave') {
       rotY = Math.sin(elapsed * 1.8 * speedMult) * 0.45;
       rotX = Math.cos(elapsed * 2.4 * speedMult) * 0.35;
@@ -1414,41 +1396,44 @@ async function runRenderer(cfg) {
     const lumBuf = new Float32Array(W * subH).fill(-1);
 
     if (activeLogo === 'torus') {
-      const A = cfg.anim === 'static' ? 0.8 : elapsed * 1.4 * speedMult;
-      const B = cfg.anim === 'static' ? 0.5 : elapsed * 0.75 * speedMult;
+      const A = cfg.anim === 'static' ? 1.0 : elapsed * 1.2 * speedMult;
+      const B = cfg.anim === 'static' ? 0.5 : elapsed * 0.6 * speedMult;
       const cosA = Math.cos(A), sinA = Math.sin(A);
       const cosB = Math.cos(B), sinB = Math.sin(B);
-      const R1 = 1.0, R2 = 2.05, K2 = 5.2;
-      const scaleX = W * 0.88 * scale;
-      const scaleY = (cfg.look === 'blocks' ? subH * 0.88 : subH * 0.44) * scale;
-      const halfW = W >> 1;
-      const halfH = ((subH >> 1) + offsetY * 3) | 0;
-      const tStep = lowPower ? 0.09 : 0.045;
-      const pStep = lowPower ? 0.04 : 0.02;
 
-      for (let theta = 0; theta < 6.2832; theta += tStep) {
+      const R1 = 1.0;
+      const R2 = 2.05;
+      const K2 = 5.0;
+      const K1X = W * K2 * 3 / (8 * (R1 + R2)) * 1.18 * scale;
+      const K1Y = (cfg.look === 'blocks' ? subH : subH * 0.5) * K2 * 3 / (8 * (R1 + R2)) * 2.15 * scale;
+      const halfW = W >> 1;
+      const halfH = ((subH >> 1) + offsetY * (cfg.look === 'blocks' ? 3 : 1.5)) | 0;
+
+      for (let theta = 0; theta < 6.2832; theta += 0.022) {
         const costheta = Math.cos(theta), sintheta = Math.sin(theta);
-        for (let phi = 0; phi < 6.2832; phi += pStep) {
+        const circlex = R2 + R1 * costheta;
+        const circley = R1 * sintheta;
+
+        for (let phi = 0; phi < 6.2832; phi += 0.008) {
           const cosphi = Math.cos(phi), sinphi = Math.sin(phi);
-          const circlex = R2 + R1 * costheta;
-          const circley = R1 * sinphi;
 
           const x = circlex * (cosB * cosphi + sinA * sinB * sinphi) - circley * cosA * sinB;
           const y = circlex * (sinB * cosphi - sinA * cosB * sinphi) + circley * cosA * cosB;
           const z = K2 + cosA * circlex * sinphi + circley * sinA;
           const ooz = 1 / z;
 
-          const xp = (halfW + scaleX * ooz * x) | 0;
-          const yp = (halfH - scaleY * ooz * y) | 0;
+          const xp = (halfW + K1X * ooz * x) | 0;
+          const yp = (halfH - K1Y * ooz * y) | 0;
 
           if (xp >= 0 && xp < W && yp >= 0 && yp < subH) {
             const idx = yp * W + xp;
-            if (ooz > zBuf[idx]) {
-              zBuf[idx] = ooz;
-              const L = cosphi * costheta * sinB - cosA * costheta * sinphi - sinA * sintheta + cosB * (cosA * sintheta - costheta * sinA * sinphi);
-              const lum = Math.max(0.05, Math.min(0.99, (L + 0.55) / 1.85));
+            const L = cosphi * costheta * sinB - cosA * costheta * sinphi - sinA * sintheta + cosB * (cosA * sintheta - costheta * sinA * sinphi);
+            const depthKey = ooz + Math.max(0, L) * 0.0008;
+            if (depthKey > zBuf[idx]) {
+              zBuf[idx] = depthKey;
+              const lum = L > 0 ? Math.min(0.99, L / 1.38) : 0.01;
               lumBuf[idx] = lum;
-              const gradIdx = Math.min(theme.gradient.length - 1, Math.floor((1 - lum) * theme.gradient.length));
+              const gradIdx = Math.min(theme.gradient.length - 1, Math.floor(lum * theme.gradient.length));
               rawColor[idx] = theme.gradient[gradIdx];
             }
           }
@@ -1457,9 +1442,10 @@ async function runRenderer(cfg) {
     } else if (isCitrus && renderGeometry) {
       // Superior citrus rendering with proper lighting
       const PTS = renderGeometry;
-      const scale50 = 50.0 * scale;
+      const scaleY = subH * 0.84 * scale;
+      const scaleX = (cfg.look === 'blocks' ? subH * 0.84 : subH * 1.68) * scale;
       const halfW = W >> 1;
-      const halfH = ((subH >> 1) + 2 + offsetY * 3) | 0;
+      const halfH = ((subH >> 1) + (cfg.look === 'blocks' ? 2 : 1) + offsetY * (cfg.look === 'blocks' ? 3 : 1.5)) | 0;
 
       for (let i = 0; i < PTS.length; i += 7) {
         const px = PTS[i];
@@ -1472,8 +1458,8 @@ async function runRenderer(cfg) {
         const z2 = py * sinX + z1 * cosX;
 
         const ooz = 1 / (4.9 + z2);
-        const xp = (halfW + scale50 * ooz * x1) | 0;
-        const yp = (halfH - scale50 * ooz * y2) | 0;
+        const xp = (halfW + scaleX * ooz * x1) | 0;
+        const yp = (halfH - scaleY * ooz * y2) | 0;
 
         if (xp >= 1 && xp < W - 1 && yp >= 1 && yp < subH - 1) {
           const idx = xp + yp * W;
@@ -1487,7 +1473,8 @@ async function runRenderer(cfg) {
             const ny2 = ny * cosX - nz1 * sinX;
             const nz2 = ny * sinX + nz1 * cosX;
 
-            const light = Math.max(0, Math.min(1, Math.abs(nz2) * 0.68 - nx1 * 0.32 + ny2 * 0.42 + 0.22));
+            const light = Math.max(0.05, Math.min(0.99, Math.abs(nz2) * 0.68 - nx1 * 0.32 + ny2 * 0.42 + 0.22));
+            lumBuf[idx] = light;
             if (PTS[i + 6] === 1) {
               const leafIdx = Math.min(Math.max(0, ((1 - light) * 6) | 0), 5);
               rawColor[idx] = LEAF_GRADIENT[leafIdx];
@@ -1518,7 +1505,13 @@ async function runRenderer(cfg) {
             if (nDn !== -1) { count++; sample = nDn; }
             if (nLt !== -1) { count++; sample = nLt; }
             if (nRt !== -1) { count++; sample = nRt; }
-            if (count >= 3) rawColor[idx] = sample;
+            if (count >= 2 && activeLogo !== 'torus') {
+              rawColor[idx] = sample;
+              if (typeof lumBuf !== 'undefined' && lumBuf[idx] < 0) {
+                const lUp = lumBuf[idx - W], lDn = lumBuf[idx + W], lLt = lumBuf[idx - 1], lRt = lumBuf[idx + 1];
+                lumBuf[idx] = Math.max(lUp, lDn, lLt, lRt, 0.25);
+              }
+            }
           }
         }
       }
@@ -1606,6 +1599,7 @@ async function runRenderer(cfg) {
               : Math.max(0, Math.min(0.99, (zBuf[idx] + 8) / 16));
             const gradIdx = Math.floor(normZ * (theme.gradient.length - 1));
             const colCode = rawColor[idx] >= 0 ? rawColor[idx] : theme.gradient[gradIdx];
+            const ASCII_RAMP = '.,-~:;=!*#$@';
             const HALFTONE_RAMP = ['·', '•', '●', '◉', '█'];
             const DOTS_RAMP = ['·', ':', '∘', '○', '◎', '●'];
             let ch = '#';
