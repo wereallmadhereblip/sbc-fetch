@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = {
   trigger: 'every',     // every (new tab), daily (once a day), login (login shells only), manual
   duration: 0,          // 0 = run until keypress, or 1-60 seconds auto-exit
   greeting: 'Welcome back, $USER!',
-  showTip: true,
+  showTip: false,
   fps: 30,              // frames per second (30-120) - Zero 4 default is 30
   detail: 'medium',     // low, medium, high - Zero 4 default is medium
   animSpeed: 1.0,       // animation speed multiplier (0.5-2.0)
@@ -583,7 +583,7 @@ async function runConfigMenu(cfg) {
     console.log(`  [5] Border Style     : \x1b[1;32m${cfg.border}\x1b[0m`);
     console.log(`  [6] Startup Trigger  : \x1b[1;32m${cfg.trigger}\x1b[0m`);
     console.log(`  [7] Auto-Exit Timer  : \x1b[1;32m${cfg.duration === 0 ? 'Off (until keypress)' : cfg.duration + 's'}\x1b[0m`);
-    console.log(`  [8] Exit Greeting    : \x1b[1;32m${cfg.greeting}\x1b[0m`);
+    
     console.log(`  [9] Post-Exit Tip    : \x1b[1;32m${cfg.showTip ? 'Enabled' : 'Disabled'}\x1b[0m`);
     console.log(`  [A] Framerate (FPS)  : \x1b[1;32m${cfg.fps || 45}\x1b[0m`);
     console.log(`  [B] Detail Level     : \x1b[1;32m${cfg.detail || 'high'}\x1b[0m`);
@@ -705,6 +705,78 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
     const glyphs = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789Z:・."=*+-<>¦｜';
 
     if (!renderPageFrame.rainState || renderPageFrame.rainState.W !== W || renderPageFrame.rainState.H !== H) {
+      const RAW_FONT = {
+        A: [' ███ ', '█   █', '█████', '█   █', '█   █'],
+        B: ['████ ', '█   █', '████ ', '█   █', '████ '],
+        C: [' ████', '█    ', '█    ', '█    ', ' ████'],
+        D: ['████ ', '█   █', '█   █', '█   █', '████ '],
+        E: ['█████', '█    ', '████ ', '█    ', '█████'],
+        F: ['█████', '█    ', '████ ', '█    ', '█    '],
+        G: [' ████', '█    ', '█ ███', '█   █', ' ████'],
+        H: ['█   █', '█   █', '█████', '█   █', '█   █'],
+        I: ['█████', '  █  ', '  █  ', '  █  ', '█████'],
+        J: ['   ██', '    █', '    █', '█   █', ' ███ '],
+        K: ['█   █', '█  █ ', '███  ', '█  █ ', '█   █'],
+        L: ['█    ', '█    ', '█    ', '█    ', '█████'],
+        M: ['█   █', '██ ██', '█ █ █', '█   █', '█   █'],
+        N: ['█   █', '██  █', '█ █ █', '█  ██', '█   █'],
+        O: [' ███ ', '█   █', '█   █', '█   █', ' ███ '],
+        P: ['████ ', '█   █', '████ ', '█    ', '█    '],
+        Q: [' ███ ', '█   █', '█ █ █', '█  ██', ' ████'],
+        R: ['████ ', '█   █', '████ ', '█  █ ', '█   █'],
+        S: [' ████', '█    ', ' ███ ', '    █', '████ '],
+        T: ['█████', '  █  ', '  █  ', '  █  ', '  █  '],
+        U: ['█   █', '█   █', '█   █', '█   █', ' ███ '],
+        V: ['█   █', '█   █', '█   █', ' █ █ ', '  █  '],
+        W: ['█   █', '█   █', '█ █ █', '██ ██', '█   █'],
+        X: ['█   █', ' █ █ ', '  █  ', ' █ █ ', '█   █'],
+        Y: ['█   █', ' █ █ ', '  █  ', '  █  ', '  █  '],
+        Z: ['█████', '   █ ', '  █  ', ' █   ', '█████'],
+        '0': [' ███ ', '█  ██', '█ █ █', '██  █', ' ███ '],
+        '1': ['  █  ', ' ██  ', '  █  ', '  █  ', '█████'],
+        '2': ['████ ', '    █', ' ███ ', '█    ', '█████'],
+        '3': ['████ ', '    █', ' ███ ', '    █', '████ '],
+        '4': ['█   █', '█   █', '█████', '    █', '    █'],
+        '5': ['█████', '█    ', '████ ', '    █', '████ '],
+        '6': [' ████', '█    ', '████ ', '█   █', ' ███ '],
+        '7': ['█████', '    █', '   █ ', '  █  ', '  █  '],
+        '8': [' ███ ', '█   █', ' ███ ', '█   █', ' ███ '],
+        '9': [' ███ ', '█   █', ' ████', '    █', ' ███ '],
+        '-': ['     ', '     ', '█████', '     ', '     '],
+        '_': ['     ', '     ', '     ', '     ', '█████'],
+        '!': ['  █  ', '  █  ', '  █  ', '     ', '  █  '],
+        ' ': ['   ', '   ', '   ', '   ', '   ']
+      };
+
+      const userStr = (process.env.USER || process.env.LOGNAME || 'USER').toUpperCase().slice(0, 14);
+      const renderBig = (txt) => {
+        const glyphsArr = txt.split('').map(ch => RAW_FONT[ch] || RAW_FONT[' ']);
+        return Array.from({ length: 5 }, (_, r) => glyphsArr.map(g => g[r]).join(' ').trimEnd());
+      };
+
+      const bigTop = renderBig('WELCOME BACK');
+      const bigUser = renderBig(userStr);
+      const welcomeGrid = Array.from({ length: H }, () => Array(W).fill(' '));
+      const welcomeCol = Array.from({ length: H }, () => Array(W).fill(''));
+      const startY = Math.max(1, Math.floor((H - 12) / 2));
+
+      const stampBanner = (bannerRows, yOff, ansi) => {
+        for (let ri = 0; ri < bannerRows.length; ri++) {
+          const y = startY + yOff + ri;
+          if (y < 0 || y >= H) continue;
+          const line = bannerRows[ri];
+          const startX = Math.max(0, Math.floor((W - line.length) / 2));
+          for (let ci = 0; ci < line.length && startX + ci < W; ci++) {
+            if (line[ci] !== ' ') {
+              welcomeGrid[y][startX + ci] = line[ci];
+              welcomeCol[y][startX + ci] = ansi;
+            }
+          }
+        }
+      };
+
+      stampBanner(bigTop, 0, '\x1b[1;38;2;120;255;155m');
+      stampBanner(bigUser, 7, '\x1b[1;38;2;240;255;245m');
       let rawFf = '';
       try {
         rawFf = execSync('fastfetch --pipe false --logo-padding-left 1', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -715,19 +787,22 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
           rawFf = '\x1b[1;32mfastfetch not found in PATH.\x1b[0m';
         }
       }
+      rawFf = rawFf.replace(/\x1b\]8;;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
+      const realShell = (process.env.SHELL || 'bash').split('/').pop();
+      const realTerm = process.env.TERM_PROGRAM || process.env.WT_SESSION ? 'Windows Terminal' : (process.env.TERM || 'xterm-256color');
+      rawFf = rawFf.replace(/(Shell:\x1b\[0m\s*)node\b/g, `$1${realShell}`);
+      rawFf = rawFf.replace(/(Terminal:\x1b\[0m)\s*$/gm, `$1 ${realTerm}`);
 
       const vGrid = Array.from({ length: H }, () => Array(W).fill(' '));
       const vCol = Array.from({ length: H }, () => Array(W).fill(''));
       let r = 0, c = 0, curAnsi = '';
-
       const tokens = rawFf.split(/(\x1b\[[0-9;?]*[A-Za-z])/);
       for (const tok of tokens) {
         if (!tok) continue;
         if (tok.startsWith('\x1b[')) {
           const m = tok.match(/^\x1b\[([0-9;?]*)([A-Za-z])$/);
           if (!m) continue;
-          const pStr = m.at(1) || '';
-          const cmd = m.at(2);
+          const pStr = m.at(1) || '', cmd = m.at(2);
           const nums = pStr.split(';').map(n => parseInt(n, 10) || 0);
           const n0 = nums.at(0) || 0, n1 = nums.at(1) || 0;
           if (cmd === 'm') curAnsi = (pStr === '' || pStr === '0') ? '' : (curAnsi + tok);
@@ -736,19 +811,13 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
           else if (cmd === 'C') c = Math.min(W - 1, c + (n0 || 1));
           else if (cmd === 'D') c = Math.max(0, c - (n0 || 1));
           else if (cmd === 'G') c = Math.max(0, Math.min(W - 1, (n0 || 1) - 1));
-          else if (cmd === 'H' || cmd === 'f') {
-            r = Math.max(0, Math.min(H - 1, (n0 || 1) - 1));
-            c = Math.max(0, Math.min(W - 1, (n1 || 1) - 1));
-          }
+          else if (cmd === 'H' || cmd === 'f') { r = Math.max(0, Math.min(H - 1, (n0 || 1) - 1)); c = Math.max(0, Math.min(W - 1, (n1 || 1) - 1)); }
         } else {
           for (const ch of tok) {
             if (ch === '\r') c = 0;
             else if (ch === '\n') { r++; c = 0; }
             else if (ch >= ' ') {
-              if (r >= 0 && r < H && c >= 0 && c < W) {
-                vGrid[r][c] = ch;
-                vCol[r][c] = curAnsi;
-              }
+              if (r >= 0 && r < H && c >= 0 && c < W) { vGrid[r][c] = ch; vCol[r][c] = curAnsi; }
               c++;
             }
           }
@@ -757,94 +826,149 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
 
       const usedRows = vGrid.reduce((acc, rowArr, idx) => rowArr.some(ch => ch !== ' ') ? idx + 1 : acc, 0);
       const topPad = Math.max(0, Math.floor((H - usedRows) / 2));
+      let maxUsedCol = 0;
+      for (let ri = 0; ri < usedRows; ri++) {
+        for (let ci = W - 1; ci >= 0; ci--) {
+          if (vGrid[ri][ci] !== ' ') { if (ci + 1 > maxUsedCol) maxUsedCol = ci + 1; break; }
+        }
+      }
+      const leftPad = Math.max(0, Math.floor((W - maxUsedCol) / 2));
       const ffGrid = Array.from({ length: H }, () => Array(W).fill(' '));
       const ffCol = Array.from({ length: H }, () => Array(W).fill(''));
       for (let ri = 0; ri < usedRows && ri + topPad < H; ri++) {
-        ffGrid[ri + topPad] = vGrid[ri];
-        ffCol[ri + topPad] = vCol[ri];
+        for (let ci = 0; ci + leftPad < W; ci++) {
+          ffGrid[ri + topPad][ci + leftPad] = vGrid[ri][ci];
+          ffCol[ri + topPad][ci + leftPad] = vCol[ri][ci];
+        }
       }
 
-      const drops = Array.from({ length: W }, (_, colIdx) => ({
-        y: -Math.random() * H * 1.4,
-        speed: (0.45 + Math.random() * 0.75) * speed,
-        len: Math.floor(6 + Math.random() * Math.max(8, H * 0.65)),
-        seed: (colIdx * 31 + Math.floor(Math.random() * 100)) | 0
+      const cellGlyph = Array.from({ length: H }, () =>
+        Array.from({ length: W }, () => glyphs[(Math.random() * glyphs.length) | 0])
+      );
+
+      const fgDrops = Array.from({ length: W }, (_, x) => ({
+        y: -Math.random() * H * 1.2 - (x % 5),
+        speed: (0.65 + Math.random() * 0.85) * speed,
+        len: Math.floor(7 + Math.random() * Math.max(9, H * 0.65))
       }));
 
-      const revealed = Array.from({ length: H }, () => Uint8Array.from({ length: W }, () => 0));
-      renderPageFrame.rainState = { W, H, ffGrid, ffCol, drops, revealed, lastTick: elapsed };
-    }
+      const bgDrops = Array.from({ length: W }, (_, x) => ({
+        y: Math.random() * H - (x % 7),
+        speed: (0.28 + Math.random() * 0.35) * speed,
+        len: Math.floor(9 + Math.random() * Math.max(10, H * 0.75))
+      }));
 
+      const revealedWelcome = Array.from({ length: H }, () => Uint8Array.from({ length: W }, () => 0));
+      const revealedFf = Array.from({ length: H }, () => Uint8Array.from({ length: W }, () => 0));
+      renderPageFrame.rainState = { W, H, cellGlyph, welcomeGrid, welcomeCol, ffGrid, ffCol, fgDrops, bgDrops, revealedWelcome, revealedFf, lastTick: elapsed };
+    }
     const st = renderPageFrame.rainState;
     const dt = Math.min(0.25, Math.max(0.01, elapsed - st.lastTick));
     st.lastTick = elapsed;
 
-    const revealActive = elapsed >= 0.65 / speed;
+    const mutCount = Math.max(2, ((W * H) * 0.015) | 0);
+    for (let m = 0; m < mutCount; m++) {
+      const rx = (Math.random() * W) | 0;
+      const ry = (Math.random() * H) | 0;
+      st.cellGlyph[ry][rx] = glyphs[(Math.random() * glyphs.length) | 0];
+    }
+
+    const showWelcomePhase = elapsed < 3.4 / speed;
+    const welcomeSweep = elapsed >= 0.45 / speed && showWelcomePhase;
+    const ffSweep = elapsed >= 3.4 / speed;
+
     for (let x = 0; x < W; x++) {
-      const d = st.drops[x];
-      const prevHead = Math.floor(d.y);
-      d.y += d.speed * 22 * dt;
-      const curHead = Math.floor(d.y);
+      const fg = st.fgDrops[x];
+      const prevHead = Math.floor(fg.y);
+      fg.y += fg.speed * 25 * dt;
+      const curHead = Math.floor(fg.y);
 
-      if (revealActive) {
-        const sweepEnd = Math.min(H - 1, curHead);
-        const sweepStart = Math.max(0, prevHead - 1);
-        for (let y = sweepStart; y <= sweepEnd; y++) {
-          if (st.ffGrid[y][x] !== ' ') {
-            st.revealed[y][x] = 1;
-          }
-        }
+      const sweepStart = Math.max(0, prevHead - 1);
+      const sweepEnd = Math.min(H - 1, curHead);
+      for (let y = sweepStart; y <= sweepEnd; y++) {
+        if (welcomeSweep && st.welcomeGrid[y][x] !== ' ') st.revealedWelcome[y][x] = 1;
+        if (ffSweep && st.ffGrid[y][x] !== ' ') st.revealedFf[y][x] = 1;
       }
 
-      if (d.y - d.len > H + 2) {
-        d.y = -Math.random() * (H * 0.6);
-        d.speed = (0.45 + Math.random() * 0.75) * speed;
-        d.len = Math.floor(6 + Math.random() * Math.max(8, H * 0.65));
+      if (fg.y - fg.len > H + 2) {
+        fg.y = -Math.random() * (H * 0.5);
+        fg.speed = (0.65 + Math.random() * 0.85) * speed;
+        fg.len = Math.floor(7 + Math.random() * Math.max(9, H * 0.65));
       }
-    }
 
-    if (elapsed >= 3.6 / speed) {
-      const scanRow = Math.min(H, Math.floor(((elapsed - 3.6 / speed) / (0.8 / speed)) * H));
-      for (let y = 0; y < scanRow; y++) {
-        for (let x = 0; x < W; x++) {
-          if (st.ffGrid[y][x] !== ' ') st.revealed[y][x] = 1;
-        }
+      const bg = st.bgDrops[x];
+      bg.y += bg.speed * 25 * dt;
+      if (bg.y - bg.len > H + 2) {
+        bg.y = -Math.random() * (H * 0.6);
+        bg.speed = (0.28 + Math.random() * 0.35) * speed;
+        bg.len = Math.floor(9 + Math.random() * Math.max(10, H * 0.75));
       }
     }
+
+    if (showWelcomePhase && elapsed >= 1.8 / speed) {
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (st.welcomeGrid[y][x] !== ' ') st.revealedWelcome[y][x] = 1;
+    }
+    if (elapsed >= 5.2 / speed) {
+      const scanRow = Math.min(H, Math.floor(((elapsed - 5.2 / speed) / (0.8 / speed)) * H));
+      for (let y = 0; y < scanRow; y++) for (let x = 0; x < W; x++) if (st.ffGrid[y][x] !== ' ') st.revealedFf[y][x] = 1;
+    }
+
+    const hasNear = (grid, rev, x, y) => {
+      if (rev[y][x] === 1 && grid[y][x] !== ' ') return true;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= H) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if (nx >= 0 && nx < W && rev[ny][nx] === 1 && grid[ny][nx] !== ' ') return true;
+        }
+      }
+      return false;
+    };
 
     const lines = [`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`];
-    const headCol = '\x1b[1;38;5;231m';
-    const brightGreen = '\x1b[1;38;5;82m';
-    const midGreen = '\x1b[38;5;40m';
-    const dimGreen = '\x1b[38;5;22m';
 
     for (let y = 0; y < H; y++) {
       let rowStr = '';
       let lastAnsi = '';
       for (let x = 0; x < W; x++) {
-        const d = st.drops[x];
-        const headY = Math.floor(d.y);
-        const dy = headY - y;
-        const isRain = dy >= 0 && dy < d.len;
+        const fg = st.fgDrops[x];
+        const bg = st.bgDrops[x];
+        const fgDy = Math.floor(fg.y) - y;
+        const bgDy = Math.floor(bg.y) - y;
+        const inFg = fgDy >= 0 && fgDy < fg.len;
+        const inBg = bgDy >= 0 && bgDy < bg.len;
+
         const ffChar = st.ffGrid[y][x];
-        const isRevealed = st.revealed[y][x] === 1 && ffChar !== ' ';
+        const welChar = st.welcomeGrid[y][x];
+        const isFfChar = ffSweep && st.revealedFf[y][x] === 1 && ffChar !== ' ';
+        const isWelChar = showWelcomePhase && st.revealedWelcome[y][x] === 1 && welChar !== ' ';
+        const inHalo = (ffSweep && hasNear(st.ffGrid, st.revealedFf, x, y)) ||
+                       (showWelcomePhase && hasNear(st.welcomeGrid, st.revealedWelcome, x, y));
 
         let outChar = ' ';
         let outAnsi = '';
 
-        if (isRain && dy === 0) {
-          const gIdx = (y * 13 + x * 7 + frameCount * 3 + d.seed) % glyphs.length;
-          outChar = glyphs[gIdx];
-          outAnsi = headCol;
-        } else if (isRevealed) {
+        if (isFfChar) {
           outChar = ffChar;
-          outAnsi = (isRain && dy <= 2) ? brightGreen : st.ffCol[y][x];
-        } else if (isRain) {
-          const gIdx = (y * 17 + x * 11 + Math.floor(frameCount / 2) + d.seed) % glyphs.length;
-          outChar = glyphs[gIdx];
-          if (dy <= 2) outAnsi = brightGreen;
-          else if (dy <= d.len * 0.55) outAnsi = midGreen;
-          else outAnsi = dimGreen;
+          outAnsi = st.ffCol[y][x];
+        } else if (isWelChar) {
+          outChar = welChar;
+          outAnsi = st.welcomeCol[y][x];
+        } else if (inHalo) {
+          outChar = ' ';
+        } else if (inFg) {
+          outChar = st.cellGlyph[y][x];
+          if (fgDy === 0) outAnsi = '\x1b[1;38;2;235;255;242m';
+          else if (fgDy === 1) outAnsi = '\x1b[1;38;2;130;255;165m';
+          else {
+            const t = Math.max(0, 1 - fgDy / fg.len);
+            outAnsi = `\x1b[38;2;0;${Math.round(45 + t * 185)};${Math.round(15 + t * 65)}m`;
+          }
+        } else if (inBg) {
+          outChar = st.cellGlyph[y][x];
+          const t = Math.max(0, 1 - bgDy / bg.len);
+          outAnsi = `\x1b[38;2;0;${Math.round(24 + t * 72)};${Math.round(8 + t * 24)}m`;
         }
 
         if (outAnsi !== lastAnsi) {
