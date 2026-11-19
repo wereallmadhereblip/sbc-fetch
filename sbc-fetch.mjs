@@ -36,7 +36,7 @@ const OPTIONS = {
   border: ['rounded', 'sharp', 'double', 'heavy', 'ascii', 'none'],
   trigger: ['every', 'daily', 'login', 'manual'],
   detail: ['low', 'medium', 'high'],
-  page: ['404-space', 'christmas', 'progress-loader', 'text-scramble']
+  page: ['404-space', 'christmas', 'progress-loader', 'text-scramble', 'matrix-rain']
 };
 
 // xterm-256 Color Gradients (matching fetch-anim.mjs aesthetic)
@@ -698,6 +698,168 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
   const dimCol = '\x1b[2m';
   const speed = cfg.animSpeed || 1.0;
 
+  if (cfg.pageStyle === 'matrix-rain') {
+    const W = innerW - 2;
+    const H = rows;
+    const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
+    const glyphs = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789Z:・."=*+-<>¦｜';
+
+    if (!renderPageFrame.rainState || renderPageFrame.rainState.W !== W || renderPageFrame.rainState.H !== H) {
+      let rawFf = '';
+      try {
+        rawFf = execSync('fastfetch --pipe false --logo-padding-left 1', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch {
+        try {
+          rawFf = execSync('fastfetch', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch {
+          rawFf = '\x1b[1;32mfastfetch not found in PATH.\x1b[0m';
+        }
+      }
+
+      const vGrid = Array.from({ length: H }, () => Array(W).fill(' '));
+      const vCol = Array.from({ length: H }, () => Array(W).fill(''));
+      let r = 0, c = 0, curAnsi = '';
+
+      const tokens = rawFf.split(/(\x1b\[[0-9;?]*[A-Za-z])/);
+      for (const tok of tokens) {
+        if (!tok) continue;
+        if (tok.startsWith('\x1b[')) {
+          const m = tok.match(/^\x1b\[([0-9;?]*)([A-Za-z])$/);
+          if (!m) continue;
+          const pStr = m.at(1) || '';
+          const cmd = m.at(2);
+          const nums = pStr.split(';').map(n => parseInt(n, 10) || 0);
+          const n0 = nums.at(0) || 0, n1 = nums.at(1) || 0;
+          if (cmd === 'm') curAnsi = (pStr === '' || pStr === '0') ? '' : (curAnsi + tok);
+          else if (cmd === 'A') r = Math.max(0, r - (n0 || 1));
+          else if (cmd === 'B') r = Math.min(H - 1, r + (n0 || 1));
+          else if (cmd === 'C') c = Math.min(W - 1, c + (n0 || 1));
+          else if (cmd === 'D') c = Math.max(0, c - (n0 || 1));
+          else if (cmd === 'G') c = Math.max(0, Math.min(W - 1, (n0 || 1) - 1));
+          else if (cmd === 'H' || cmd === 'f') {
+            r = Math.max(0, Math.min(H - 1, (n0 || 1) - 1));
+            c = Math.max(0, Math.min(W - 1, (n1 || 1) - 1));
+          }
+        } else {
+          for (const ch of tok) {
+            if (ch === '\r') c = 0;
+            else if (ch === '\n') { r++; c = 0; }
+            else if (ch >= ' ') {
+              if (r >= 0 && r < H && c >= 0 && c < W) {
+                vGrid[r][c] = ch;
+                vCol[r][c] = curAnsi;
+              }
+              c++;
+            }
+          }
+        }
+      }
+
+      const usedRows = vGrid.reduce((acc, rowArr, idx) => rowArr.some(ch => ch !== ' ') ? idx + 1 : acc, 0);
+      const topPad = Math.max(0, Math.floor((H - usedRows) / 2));
+      const ffGrid = Array.from({ length: H }, () => Array(W).fill(' '));
+      const ffCol = Array.from({ length: H }, () => Array(W).fill(''));
+      for (let ri = 0; ri < usedRows && ri + topPad < H; ri++) {
+        ffGrid[ri + topPad] = vGrid[ri];
+        ffCol[ri + topPad] = vCol[ri];
+      }
+
+      const drops = Array.from({ length: W }, (_, colIdx) => ({
+        y: -Math.random() * H * 1.4,
+        speed: (0.45 + Math.random() * 0.75) * speed,
+        len: Math.floor(6 + Math.random() * Math.max(8, H * 0.65)),
+        seed: (colIdx * 31 + Math.floor(Math.random() * 100)) | 0
+      }));
+
+      const revealed = Array.from({ length: H }, () => Uint8Array.from({ length: W }, () => 0));
+      renderPageFrame.rainState = { W, H, ffGrid, ffCol, drops, revealed, lastTick: elapsed };
+    }
+
+    const st = renderPageFrame.rainState;
+    const dt = Math.min(0.25, Math.max(0.01, elapsed - st.lastTick));
+    st.lastTick = elapsed;
+
+    const revealActive = elapsed >= 0.65 / speed;
+    for (let x = 0; x < W; x++) {
+      const d = st.drops[x];
+      const prevHead = Math.floor(d.y);
+      d.y += d.speed * 22 * dt;
+      const curHead = Math.floor(d.y);
+
+      if (revealActive) {
+        const sweepEnd = Math.min(H - 1, curHead);
+        const sweepStart = Math.max(0, prevHead - 1);
+        for (let y = sweepStart; y <= sweepEnd; y++) {
+          if (st.ffGrid[y][x] !== ' ') {
+            st.revealed[y][x] = 1;
+          }
+        }
+      }
+
+      if (d.y - d.len > H + 2) {
+        d.y = -Math.random() * (H * 0.6);
+        d.speed = (0.45 + Math.random() * 0.75) * speed;
+        d.len = Math.floor(6 + Math.random() * Math.max(8, H * 0.65));
+      }
+    }
+
+    if (elapsed >= 3.6 / speed) {
+      const scanRow = Math.min(H, Math.floor(((elapsed - 3.6 / speed) / (0.8 / speed)) * H));
+      for (let y = 0; y < scanRow; y++) {
+        for (let x = 0; x < W; x++) {
+          if (st.ffGrid[y][x] !== ' ') st.revealed[y][x] = 1;
+        }
+      }
+    }
+
+    const lines = [`${bCol}${box.tl}${box.h.repeat(innerW)}${box.tr}${rst}`];
+    const headCol = '\x1b[1;38;5;231m';
+    const brightGreen = '\x1b[1;38;5;82m';
+    const midGreen = '\x1b[38;5;40m';
+    const dimGreen = '\x1b[38;5;22m';
+
+    for (let y = 0; y < H; y++) {
+      let rowStr = '';
+      let lastAnsi = '';
+      for (let x = 0; x < W; x++) {
+        const d = st.drops[x];
+        const headY = Math.floor(d.y);
+        const dy = headY - y;
+        const isRain = dy >= 0 && dy < d.len;
+        const ffChar = st.ffGrid[y][x];
+        const isRevealed = st.revealed[y][x] === 1 && ffChar !== ' ';
+
+        let outChar = ' ';
+        let outAnsi = '';
+
+        if (isRain && dy === 0) {
+          const gIdx = (y * 13 + x * 7 + frameCount * 3 + d.seed) % glyphs.length;
+          outChar = glyphs[gIdx];
+          outAnsi = headCol;
+        } else if (isRevealed) {
+          outChar = ffChar;
+          outAnsi = (isRain && dy <= 2) ? brightGreen : st.ffCol[y][x];
+        } else if (isRain) {
+          const gIdx = (y * 17 + x * 11 + Math.floor(frameCount / 2) + d.seed) % glyphs.length;
+          outChar = glyphs[gIdx];
+          if (dy <= 2) outAnsi = brightGreen;
+          else if (dy <= d.len * 0.55) outAnsi = midGreen;
+          else outAnsi = dimGreen;
+        }
+
+        if (outAnsi !== lastAnsi) {
+          rowStr += rst + outAnsi;
+          lastAnsi = outAnsi;
+        }
+        rowStr += outChar;
+      }
+      lines.push(`${bCol}${box.v}${rst} ${rowStr}${rst} ${bCol}${box.v}${rst}`);
+    }
+
+    lines.push(`${bCol}${box.bl}${box.h.repeat(Math.max(0, innerW))}${box.br}${rst}`);
+    return lines;
+  }
+
   if (cfg.pageStyle === 'text-scramble') {
     const bCol = `\x1b[38;5;${theme.gradient[Math.floor(theme.gradient.length / 2)]}m`;
     const hiCol = `\x1b[38;5;${theme.gradient}m`;
@@ -833,7 +995,7 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
       for (let c = 0; c < innerW; c++) rowStr += colorGrid[r][c] ? `${colorGrid[r][c]}${grid[r][c]}${rst}` : grid[r][c];
       lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
     }
-    const footer = ' [PAGE: TEXT-SCRAMBLE] Press any key to continue ';
+    const footer = '';
     const fPad = Math.max(0, innerW - footer.length);
     const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
     lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
@@ -934,7 +1096,7 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
       }
       lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
     }
-    const footer = ' [PAGE: PROGRESS-LOADER] Press any key to continue ';
+    const footer = '';
     const fPad = Math.max(0, innerW - footer.length);
     const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
     lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
@@ -1040,7 +1202,7 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
       }
       lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
     }
-    const footer = ' [PAGE: CHRISTMAS] Press any key to continue ';
+    const footer = '';
     const fPad = Math.max(0, innerW - footer.length);
     const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
     lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
@@ -1123,7 +1285,7 @@ function renderPageFrame(cfg, elapsed, frameCount, box, theme) {
     }
     lines.push(`${bCol}${box.v}${rst}${rowStr}${bCol}${box.v}${rst}`);
   }
-  const footer = ` [PAGE: ${(cfg.pageStyle || '404-space').toUpperCase()}] Press any key to continue `;
+  const footer = '';
   const fPad = Math.max(0, innerW - footer.length);
   const lDash = Math.floor(fPad / 2), rDash = fPad - lDash;
   lines.push(`${bCol}${box.bl}${box.h.repeat(lDash)}${dimCol}${footer}${rst}${bCol}${box.h.repeat(rDash)}${box.br}${rst}`);
@@ -1317,7 +1479,7 @@ async function runRenderer(cfg) {
 
           renderFrame.ffGrid = centeredGrid;
           renderFrame.ffCol = centeredCol;
-          renderFrame.ffFull = buildBox(centeredGrid, centeredCol, ' [FASTFETCH] Press any key to continue ');
+          renderFrame.ffFull = buildBox(centeredGrid, centeredCol, '');
           renderFrame.buildBox = buildBox;
         }
 
@@ -1343,7 +1505,7 @@ async function runRenderer(cfg) {
               }
             }
           }
-          linesToDraw = renderFrame.buildBox(dGrid, dCol, ' [LOADING SYSTEM INFO...] ');
+          linesToDraw = renderFrame.buildBox(dGrid, dCol, '');
         }
       } else {
         linesToDraw = renderPageFrame(cfg, elapsed, frameCount, box, theme);
@@ -1641,11 +1803,7 @@ async function runRenderer(cfg) {
       lines.push(`${bCol}${box.v}${rst} ${artRow} ${bCol}${box.v}${rst} ${styledInfo} ${bCol}${box.v}${rst}`);
     }
 
-    const footerText = ` [${activeLogo.toUpperCase()} | ${cfg.anim} | ${cfg.look}] Press any key to continue `;
-    const fPad = Math.max(0, totalWidth - 2 - footerText.length);
-    const leftDash = Math.floor(fPad / 2);
-    const rightDash = fPad - leftDash;
-    lines.push(`${bCol}${box.bl}${box.h.repeat(leftDash)}\x1b[2m${footerText}${rst}${bCol}${box.h.repeat(rightDash)}${box.br}${rst}`);
+    lines.push(`${bCol}${box.bl}${box.h.repeat(Math.max(0, totalWidth - 2))}${box.br}${rst}`);
 
     let out = '\x1b[?2026h';
     for (let r = 0; r < lines.length; r++) {
